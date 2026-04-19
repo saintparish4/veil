@@ -736,12 +736,19 @@ contract C is Initializable, Upgradeable {
 
     #[test]
     fn integration_scan_comprehensive_vulnerabilities() {
-        let path = "contracts/comprehensive-vulnerabilities.sol";
-        let path_alt = "../contracts/comprehensive-vulnerabilities.sol";
+        // When run via `cargo test` from the workspace root the cwd is the workspace root;
+        // when run directly from the crate directory the cwd is the crate root.
+        let path = "core/src/contracts/comprehensive-vulnerabilities.sol";
+        let path_alt = "src/contracts/comprehensive-vulnerabilities.sol";
         let path_used = if std::path::Path::new(path).exists() {
             path
-        } else {
+        } else if std::path::Path::new(path_alt).exists() {
             path_alt
+        } else {
+            panic!(
+                "comprehensive-vulnerabilities.sol not found; tried '{}' and '{}'",
+                path, path_alt
+            )
         };
         let registry = build_registry();
         let mut parser = new_solidity_parser().expect("parser");
