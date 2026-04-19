@@ -1,0 +1,29 @@
+# Cargo — build artifacts (all profiles)
+/target/
+
+# rustfmt backups
+**/*.rs.bk
+
+# MSVC / Windows — debug symbols emitted next to binaries
+*.pdb
+
+# OS noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editor / IDE (local-only)
+.idea/
+*.swp
+*~
+
+# Local env and secrets (keep `.env.example` tracked if you add one)
+.env
+.env.*
+!.env.example
+
+# Profiling / debug dumps (optional local output)
+perf.data
+perf.data.old
+*.profraw
+*.profdata
