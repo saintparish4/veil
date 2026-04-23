@@ -33,6 +33,18 @@ Veil is built differently:
 
 ---
 
+## Performance
+
+Veil scans each Solidity fixture in a **median of ~4.0 ms** (p99 **< 10 ms**) across the 18 real contracts in the perf set (~126 KB Solidity), computed from [`benchmarks/perf/results/summary.json`](benchmarks/perf/results/summary.json). Reproduce:
+
+```bash
+just bench-perf
+```
+
+Numbers come from Criterion's `scan_file/*` group driven through `veil::scan::scan_file_with` — the same entry point the `veil` binary uses. Three synthetic fixtures (`synth-small`/`medium`/`large`, up to 80 KB) are excluded from the headline p99 since `synth-large` is deliberately oversized for scaling studies; see [`benchmarks/perf/README.md`](benchmarks/perf/README.md) for the full per-fixture breakdown. A full-corpus wall-time number will land once the precision corpus is vendored in Phase 3 of the proof-points plan.
+
+---
+
 ## Installation
 
 ### Prerequisites

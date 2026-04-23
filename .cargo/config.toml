@@ -1,0 +1,4 @@
+[alias]
+# Lets `cargo xtask <subcommand>` route through the xtask crate without
+# requiring `-p xtask --`. Matches the pattern from rust-lang/cargo#545.
+xtask = "run --quiet --package xtask --"

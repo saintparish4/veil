@@ -1,0 +1,60 @@
+[package]
+name = "veil"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Veil — Solidity smart-contract security scanner (library + CLI)."
+homepage = "https://github.com/saintparish4/veil"
+documentation = "https://github.com/saintparish4/veil"
+readme = "../README.md"
+keywords = ["solidity", "security", "scanner", "static-analysis", "ethereum"]
+categories = ["development-tools", "cryptography::cryptocurrencies"]
+
+[lib]
+name = "veil"
+path = "src/lib.rs"
+crate-type = ["lib"]
+
+[[bin]]
+name = "veil"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[[bin]]
+name = "codegen"
+path = "src/bin/codegen.rs"
+required-features = ["codegen"]
+
+[features]
+default = ["cli"]
+cli = ["dep:colored", "dep:clap", "dep:tracing-subscriber"]
+codegen = ["dep:ts-rs"]
+
+[dependencies]
+tree-sitter = { workspace = true }
+tree-sitter-solidity = { workspace = true }
+tree-sitter-language = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+walkdir = { workspace = true }
+smallvec = { workspace = true }
+tracing = { workspace = true }
+sha2 = { workspace = true }
+colored = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
+ts-rs = { workspace = true, optional = true }
+
+[dev-dependencies]
+insta = { workspace = true }
+assert_cmd = { workspace = true }
+predicates = { workspace = true }
+criterion = { workspace = true }
+proptest = { workspace = true }
+tempfile = { workspace = true }
+
+[[bench]] 
+name = "scan_bench" 
+harness = false 

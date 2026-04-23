@@ -16,6 +16,7 @@ Desktop.ini
 .idea/
 *.swp
 *~
+.cursor/
 
 # Local env and secrets (keep `.env.example` tracked if you add one)
 .env
@@ -27,3 +28,9 @@ perf.data
 perf.data.old
 *.profraw
 *.profdata
+
+# Benchmark inputs — large upstream corpora fetched at pinned SHAs.
+# Result artifacts under benchmarks/*/results/ are committed; only the
+# vendor tree is ignored.
+/benchmarks/vendor/
+/target-llvm-cov/

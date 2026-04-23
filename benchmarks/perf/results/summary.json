@@ -1,0 +1,328 @@
+{
+  "generated_at": "2026-04-23T22:26:39Z",
+  "git_sha": "9add466b4592058365837553d53a6316d1d105c3",
+  "benches": [
+    {
+      "id": "scan_file/cfg_false_positive_regression",
+      "group": "scan_file",
+      "function": "cfg_false_positive_regression",
+      "mean_ns": 4255765.311500001,
+      "median_ns": 4025998.85,
+      "std_dev_ns": 1117146.7786921526,
+      "p50_ns": 4035327.15,
+      "p95_ns": 5533783.3,
+      "p99_ns": 9845185.7,
+      "throughput": {
+        "kind": "bytes",
+        "value": 6068
+      }
+    },
+    {
+      "id": "scan_file/cfg_true_positive",
+      "group": "scan_file",
+      "function": "cfg_true_positive",
+      "mean_ns": 3024579.9576923084,
+      "median_ns": 2996510.692307692,
+      "std_dev_ns": 128727.12393863332,
+      "p50_ns": 2996674.0384615385,
+      "p95_ns": 3225378.5,
+      "p99_ns": 3482908.6923076925,
+      "throughput": {
+        "kind": "bytes",
+        "value": 3607
+      }
+    },
+    {
+      "id": "scan_file/comprehensive-vulnerabilities",
+      "group": "scan_file",
+      "function": "comprehensive-vulnerabilities",
+      "mean_ns": 3097430.415,
+      "median_ns": 3066948.480769231,
+      "std_dev_ns": 118286.70091267455,
+      "p50_ns": 3067103.923076923,
+      "p95_ns": 3338785.3846153845,
+      "p99_ns": 3517080.3076923075,
+      "throughput": {
+        "kind": "bytes",
+        "value": 2851
+      }
+    },
+    {
+      "id": "scan_file/cross-chain-bridge",
+      "group": "scan_file",
+      "function": "cross-chain-bridge",
+      "mean_ns": 4410160.513888887,
+      "median_ns": 4204649.444444444,
+      "std_dev_ns": 633567.3051190794,
+      "p50_ns": 4204762.944444444,
+      "p95_ns": 5113255.277777778,
+      "p99_ns": 7066171.833333333,
+      "throughput": {
+        "kind": "bytes",
+        "value": 5720
+      }
+    },
+    {
+      "id": "scan_file/defi-yield-aggregator",
+      "group": "scan_file",
+      "function": "defi-yield-aggregator",
+      "mean_ns": 4071979.862272727,
+      "median_ns": 3990412.522727273,
+      "std_dev_ns": 616338.2330678354,
+      "p50_ns": 3993208.8636363638,
+      "p95_ns": 4718696.2272727275,
+      "p99_ns": 5117733.545454546,
+      "throughput": {
+        "kind": "bytes",
+        "value": 4522
+      }
+    },
+    {
+      "id": "scan_file/false-positive-edge-cases",
+      "group": "scan_file",
+      "function": "false-positive-edge-cases",
+      "mean_ns": 2113493.4180337335,
+      "median_ns": 2077450.2903225808,
+      "std_dev_ns": 137549.72634905827,
+      "p50_ns": 2078425.5806451612,
+      "p95_ns": 2336669.222222222,
+      "p99_ns": 2736795.35483871,
+      "throughput": {
+        "kind": "bytes",
+        "value": 2839
+      }
+    },
+    {
+      "id": "scan_file/governance-timelock",
+      "group": "scan_file",
+      "function": "governance-timelock",
+      "mean_ns": 4085713.02,
+      "median_ns": 4034678.875,
+      "std_dev_ns": 253291.5155946441,
+      "p50_ns": 4035503.15,
+      "p95_ns": 4422751.95,
+      "p99_ns": 4536082.9,
+      "throughput": {
+        "kind": "bytes",
+        "value": 6051
+      }
+    },
+    {
+      "id": "scan_file/modern-liquidity-pool",
+      "group": "scan_file",
+      "function": "modern-liquidity-pool",
+      "mean_ns": 4575899.878888886,
+      "median_ns": 4374477.666666666,
+      "std_dev_ns": 656748.1358835811,
+      "p50_ns": 4375877.833333333,
+      "p95_ns": 5245927.611111111,
+      "p99_ns": 6293324.222222222,
+      "throughput": {
+        "kind": "bytes",
+        "value": 6234
+      }
+    },
+    {
+      "id": "scan_file/modern-staking-vault",
+      "group": "scan_file",
+      "function": "modern-staking-vault",
+      "mean_ns": 3612473.933750001,
+      "median_ns": 3539396.4166666665,
+      "std_dev_ns": 483242.86109535943,
+      "p50_ns": 3555839.2916666665,
+      "p95_ns": 4333888.458333333,
+      "p99_ns": 4927367.708333333,
+      "throughput": {
+        "kind": "bytes",
+        "value": 3493
+      }
+    },
+    {
+      "id": "scan_file/new-detectors-test",
+      "group": "scan_file",
+      "function": "new-detectors-test",
+      "mean_ns": 3646489.066818181,
+      "median_ns": 3539158.7272727275,
+      "std_dev_ns": 321411.4186705517,
+      "p50_ns": 3539457.5,
+      "p95_ns": 4058904.1363636362,
+      "p99_ns": 4954692.590909091,
+      "throughput": {
+        "kind": "bytes",
+        "value": 4821
+      }
+    },
+    {
+      "id": "scan_file/nft-staking-rewards",
+      "group": "scan_file",
+      "function": "nft-staking-rewards",
+      "mean_ns": 4149051.3549999986,
+      "median_ns": 4026442.625,
+      "std_dev_ns": 340836.16385875276,
+      "p50_ns": 4028081.35,
+      "p95_ns": 4888485.1,
+      "p99_ns": 5277363.7,
+      "throughput": {
+        "kind": "bytes",
+        "value": 5832
+      }
+    },
+    {
+      "id": "scan_file/production-erc20-staking",
+      "group": "scan_file",
+      "function": "production-erc20-staking",
+      "mean_ns": 5353074.101428572,
+      "median_ns": 5132884.928571429,
+      "std_dev_ns": 530302.606586265,
+      "p50_ns": 5137105.857142857,
+      "p95_ns": 6553404.0,
+      "p99_ns": 7284805.571428572,
+      "throughput": {
+        "kind": "bytes",
+        "value": 14765
+      }
+    },
+    {
+      "id": "scan_file/production-governance-token",
+      "group": "scan_file",
+      "function": "production-governance-token",
+      "mean_ns": 5777587.488461536,
+      "median_ns": 5779775.884615384,
+      "std_dev_ns": 574776.7466290828,
+      "p50_ns": 5793032.769230769,
+      "p95_ns": 6657644.076923077,
+      "p99_ns": 7359239.692307692,
+      "throughput": {
+        "kind": "bytes",
+        "value": 10260
+      }
+    },
+    {
+      "id": "scan_file/production-staking-vault",
+      "group": "scan_file",
+      "function": "production-staking-vault",
+      "mean_ns": 3753190.2189473696,
+      "median_ns": 3686174.6315789474,
+      "std_dev_ns": 217835.81401982848,
+      "p50_ns": 3686625.947368421,
+      "p95_ns": 4068481.8947368423,
+      "p99_ns": 4490397.157894737,
+      "throughput": {
+        "kind": "bytes",
+        "value": 6474
+      }
+    },
+    {
+      "id": "scan_file/production-token-vesting",
+      "group": "scan_file",
+      "function": "production-token-vesting",
+      "mean_ns": 6638629.276923077,
+      "median_ns": 6474347.423076923,
+      "std_dev_ns": 370241.0337362472,
+      "p50_ns": 6476614.0,
+      "p95_ns": 7490941.692307692,
+      "p99_ns": 7728754.615384615,
+      "throughput": {
+        "kind": "bytes",
+        "value": 18304
+      }
+    },
+    {
+      "id": "scan_file/production-yield-aggregator",
+      "group": "scan_file",
+      "function": "production-yield-aggregator",
+      "mean_ns": 3656548.76857143,
+      "median_ns": 3566838.738095238,
+      "std_dev_ns": 209964.0425133659,
+      "p50_ns": 3567160.904761905,
+      "p95_ns": 4079741.1904761903,
+      "p99_ns": 4321197.904761905,
+      "throughput": {
+        "kind": "bytes",
+        "value": 6021
+      }
+    },
+    {
+      "id": "scan_file/rewards-distributor",
+      "group": "scan_file",
+      "function": "rewards-distributor",
+      "mean_ns": 4344788.92833333,
+      "median_ns": 4211166.75,
+      "std_dev_ns": 383092.4965458169,
+      "p50_ns": 4214087.722222222,
+      "p95_ns": 5072375.833333333,
+      "p99_ns": 5639638.777777778,
+      "throughput": {
+        "kind": "bytes",
+        "value": 6969
+      }
+    },
+    {
+      "id": "scan_file/synth-large",
+      "group": "scan_file",
+      "function": "synth-large",
+      "mean_ns": 36060761.10666666,
+      "median_ns": 34974102.66666667,
+      "std_dev_ns": 3828162.981254836,
+      "p50_ns": 34984635.0,
+      "p95_ns": 40235346.333333336,
+      "p99_ns": 50208477.666666664,
+      "throughput": {
+        "kind": "bytes",
+        "value": 80804
+      }
+    },
+    {
+      "id": "scan_file/synth-medium",
+      "group": "scan_file",
+      "function": "synth-medium",
+      "mean_ns": 8941504.304444443,
+      "median_ns": 8741010.111111112,
+      "std_dev_ns": 978304.494953203,
+      "p50_ns": 8741229.0,
+      "p95_ns": 9976177.222222222,
+      "p99_ns": 12171308.222222222,
+      "throughput": {
+        "kind": "bytes",
+        "value": 20084
+      }
+    },
+    {
+      "id": "scan_file/synth-small",
+      "group": "scan_file",
+      "function": "synth-small",
+      "mean_ns": 1147008.3675280083,
+      "median_ns": 1122194.7905594406,
+      "std_dev_ns": 75062.96258906442,
+      "p50_ns": 1122483.7272727273,
+      "p95_ns": 1284467.12,
+      "p99_ns": 1426488.5,
+      "throughput": {
+        "kind": "bytes",
+        "value": 2524
+      }
+    },
+    {
+      "id": "scan_file/test-patterns",
+      "group": "scan_file",
+      "function": "test-patterns",
+      "mean_ns": 6311944.570769228,
+      "median_ns": 6083234.26923077,
+      "std_dev_ns": 976669.4308806,
+      "p50_ns": 6085371.076923077,
+      "p95_ns": 7485450.307692308,
+      "p99_ns": 9630563.23076923,
+      "throughput": {
+        "kind": "bytes",
+        "value": 10696
+      }
+    }
+  ],
+  "aggregate": {
+    "scan_file_count": 21,
+    "scan_file_median_of_medians_ns": 4026442.625,
+    "scan_file_total_bytes": 228939,
+    "corpus_elements": null,
+    "corpus_median_ns": null
+  }
+}
