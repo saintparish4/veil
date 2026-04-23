@@ -18,6 +18,8 @@ walkdir = "2.5.0"
 tracing = "0.1.44"
 clap = { version = "4", features = ["derive"] }
 anyhow = "1.0.86"
+toml = "1.1.2+spec-1.1.0"
+globset = "0.4.18" 
 
 # Core-only deps (kept here so all versions live in one file).
 tree-sitter = "0.26.5"

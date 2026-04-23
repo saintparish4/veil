@@ -1,0 +1,94 @@
+# Precision corpus — audited production DeFi source.
+#
+# `rev` can be either a tag (preferred, human-readable) or a full SHA.
+# The fetch script resolves the tag to a SHA and writes it to
+# `benchmarks/vendor/precision/<name>/.veil-resolved-sha` alongside the clone
+# so the number we quote in the README is backed by an immutable SHA.
+#
+# `include` / `exclude` are treated as globbed paths RELATIVE to the
+# cloned repo root. If `include` is empty we include every *.sol; otherwise
+# we include only files matching at least one include glob. `exclude` is
+# always applied on top.
+
+schema_version = 1
+
+[[corpus]]
+name        = "openzeppelin-contracts"
+url         = "https://github.com/OpenZeppelin/openzeppelin-contracts"
+rev         = "v5.0.2"
+include     = ["contracts/**/*.sol"]
+exclude     = [
+  "contracts/mocks/**",
+  "contracts/**/test/**",
+  "contracts/vendor/**",
+]
+
+[[corpus]]
+name        = "uniswap-v3-core"
+url         = "https://github.com/Uniswap/v3-core"
+rev         = "v1.0.0"
+include     = ["contracts/**/*.sol"]
+exclude     = ["contracts/test/**"]
+
+[[corpus]]
+name        = "uniswap-v3-periphery"
+url         = "https://github.com/Uniswap/v3-periphery"
+rev         = "v1.3.0"   # Latest upstream tag 
+include     = ["contracts/**/*.sol"]
+exclude     = ["contracts/test/**"]
+
+[[corpus]]
+name        = "aave-v3-core"
+url         = "https://github.com/aave/aave-v3-core"
+rev         = "v1.19.3"
+include     = ["contracts/**/*.sol"]
+exclude     = [
+  "contracts/mocks/**",
+  "contracts/dependencies/**",
+]
+
+[[corpus]]
+name        = "compound-v3-comet"
+url         = "https://github.com/compound-finance/comet"
+# Comet does not publish semver tags; we pin to the OpenZeppelin audit
+# checkpoint so the corpus stays audit-grade and reproducible.
+rev         = "audit/oz/original-weth-proposal"
+include     = ["contracts/**/*.sol"]
+exclude     = [
+  "contracts/test/**",
+  "contracts/mocks/**",
+]
+
+[[corpus]]
+# Curve was dropped from the Phase-3 corpus because curvefi/curve-contract
+# is a Vyper codebase (75 .vy, 0 .sol) and Veil's precision scanner is
+# Solidity-only. Balancer V2 fills the "AMM" slot with heavily-audited
+# Solidity: the `vault-deployment` tag pins the exact commit shipped to
+# mainnet as the initial Vault + weighted pools.
+name        = "balancer-v2-vault"
+url         = "https://github.com/balancer/balancer-v2-monorepo"
+rev         = "vault-deployment"
+include     = ["contracts/**/*.sol"]
+exclude     = [
+  "contracts/test/**",
+  "contracts/mocks/**",
+]
+
+[[corpus]]
+name        = "lido-core"
+# lido-dao was renamed to lidofinance/core in 2025; use the canonical URL
+# so the clone does not depend on GitHub's rename redirect.
+url         = "https://github.com/lidofinance/core"
+rev         = "v2.2.0"   # Last stable v2 release before the v3 rearchitecture.
+include     = ["contracts/**/*.sol"]
+exclude     = [
+  "contracts/test_helpers/**",
+  "contracts/0.4.24/test_helpers/**",
+]
+
+[[corpus]]
+name        = "makerdao-dss"
+url         = "https://github.com/makerdao/dss"
+rev         = "master"
+include     = ["src/**/*.sol"]
+exclude     = ["src/test/**"]

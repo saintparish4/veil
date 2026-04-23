@@ -1,0 +1,108 @@
+{
+  "corpora": [
+    {
+      "name": "openzeppelin-contracts",
+      "rev": "v5.0.2",
+      "resolved_sha": "dbb6104ce834628e473d2173bbc9d47f81a9eec3",
+      "scanned_files": 142,
+      "zero_match_globs": [],
+      "total_findings": 59,
+      "real": 0,
+      "false_positive": 0,
+      "needs_triage": 59,
+      "precision_pct": null
+    },
+    {
+      "name": "uniswap-v3-core",
+      "rev": "v1.0.0",
+      "resolved_sha": "e3589b192d0be27e100cd0daaf6c97204fdb1899",
+      "scanned_files": 33,
+      "zero_match_globs": [],
+      "total_findings": 23,
+      "real": 0,
+      "false_positive": 0,
+      "needs_triage": 23,
+      "precision_pct": null
+    },
+    {
+      "name": "uniswap-v3-periphery",
+      "rev": "v1.3.0",
+      "resolved_sha": "80f26c86c57b8a5e4b913f42844d4c8bd274d058",
+      "scanned_files": 52,
+      "zero_match_globs": [],
+      "total_findings": 42,
+      "real": 0,
+      "false_positive": 0,
+      "needs_triage": 42,
+      "precision_pct": null
+    },
+    {
+      "name": "aave-v3-core",
+      "rev": "v1.19.3",
+      "resolved_sha": "724a9ef43adf139437ba87dcbab63462394d4601",
+      "scanned_files": 77,
+      "zero_match_globs": [],
+      "total_findings": 37,
+      "real": 0,
+      "false_positive": 0,
+      "needs_triage": 37,
+      "precision_pct": null
+    },
+    {
+      "name": "compound-v3-comet",
+      "rev": "audit/oz/original-weth-proposal",
+      "resolved_sha": "1079b238a49b24af830fc2c87e0bfd4ec32e66fd",
+      "scanned_files": 63,
+      "zero_match_globs": [],
+      "total_findings": 49,
+      "real": 0,
+      "false_positive": 0,
+      "needs_triage": 49,
+      "precision_pct": null
+    },
+    {
+      "name": "balancer-v2-vault",
+      "rev": "vault-deployment",
+      "resolved_sha": "c5b42e8cd4ffe62a82ba85263eac498df7a913b5",
+      "scanned_files": 68,
+      "zero_match_globs": [],
+      "total_findings": 69,
+      "real": 0,
+      "false_positive": 0,
+      "needs_triage": 69,
+      "precision_pct": null
+    },
+    {
+      "name": "lido-core",
+      "rev": "v2.2.0",
+      "resolved_sha": "4bf7742aed332c363f3e74ffc8199d197e468ea4",
+      "scanned_files": 75,
+      "zero_match_globs": [],
+      "total_findings": 109,
+      "real": 0,
+      "false_positive": 0,
+      "needs_triage": 109,
+      "precision_pct": null
+    },
+    {
+      "name": "makerdao-dss",
+      "rev": "master",
+      "resolved_sha": "fa4f6630afb0624d04a003e920b0d71a00331d98",
+      "scanned_files": 16,
+      "zero_match_globs": [],
+      "total_findings": 16,
+      "real": 0,
+      "false_positive": 0,
+      "needs_triage": 16,
+      "precision_pct": null
+    }
+  ],
+  "aggregate": {
+    "scanned_files": 526,
+    "total_findings": 404,
+    "real": 0,
+    "false_positive": 0,
+    "needs_triage": 404,
+    "precision_pct": null
+  }
+}

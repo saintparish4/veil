@@ -1,0 +1,53 @@
+# Triage — compound-v3-comet
+
+| Finding ID | Detector | Severity | Line | Verdict | Note |
+|------------|----------|----------|------|---------|------|
+| `016c2e48eccdecab` | storage-collision | HIGH | contracts/CometProxyAdmin.sol:10 | needs-triage |  |
+| `0be41f9fc86496eb` | flash-loan | MEDIUM | contracts/vendor/canonical-weth/contracts/WETH9.sol:42 | needs-triage |  |
+| `1718b6b232c3b022` | integer-overflow | MEDIUM | contracts/Comet.sol:361 | needs-triage |  |
+| `178b866809b8c80e` | unchecked-erc20 | HIGH | contracts/bulkers/MainnetBulker.sol:40 | needs-triage |  |
+| `1ff5f34d5964ddf5` | unchecked-erc20 | MEDIUM | contracts/bulkers/MainnetBulker.sol:42 | needs-triage |  |
+| `32ac38cd6e70f69f` | integer-overflow | MEDIUM | contracts/bridges/BaseBridgeReceiver.sol:107 | needs-triage |  |
+| `337db4acadc7a50c` | storage-collision | HIGH | contracts/ConfiguratorProxy.sol:9 | needs-triage |  |
+| `337db4acadc7a50c` | storage-collision | CRITICAL | contracts/ConfiguratorProxy.sol:9 | needs-triage |  |
+| `337db4acadc7a50c` | storage-collision | HIGH | contracts/ConfiguratorProxy.sol:9 | needs-triage |  |
+| `37e8a47c0c2cea54` | unchecked-erc20 | HIGH | contracts/bulkers/BaseBulker.sol:52 | needs-triage |  |
+| `3919658c29194ca4` | unchecked-erc20 | HIGH | contracts/bulkers/MainnetBulker.sol:57 | needs-triage |  |
+| `46e6fd1bfb349410` | unchecked-calls | MEDIUM | contracts/bulkers/MainnetBulker.sol:57 | needs-triage |  |
+| `4bba6c6a1abbcf22` | integer-overflow | MEDIUM | contracts/CometExt.sol:71 | needs-triage |  |
+| `4c7269f0374b4164` | front-running | MEDIUM | contracts/Comet.sol:1261 | needs-triage |  |
+| `4e2f372ee1181044` | integer-overflow | MEDIUM | contracts/Comet.sol:546 | needs-triage |  |
+| `6a3048b6e31b2813` | unchecked-calls | MEDIUM | contracts/bulkers/BaseBulker.sol:52 | needs-triage |  |
+| `6da91b34673ffd62` | access-control | HIGH | contracts/Comet.sol:1015 | needs-triage |  |
+| `7199d2f9a0b4cf7e` | unchecked-erc20 | MEDIUM | contracts/bulkers/MainnetBulker.sol:46 | needs-triage |  |
+| `72dfc67023b3eeec` | integer-overflow | MEDIUM | contracts/Configurator.sol:310 | needs-triage |  |
+| `7385d38462d4a91e` | flash-loan | HIGH | contracts/liquidator/vendor/@uniswap/v3-periphery/contracts/libraries/CallbackValidation.sol:15 | needs-triage |  |
+| `7429c28053ab2412` | storage-collision | CRITICAL | contracts/Comet.sol:13 | needs-triage |  |
+| `75fc65d96641204f` | dos-loops | LOW | contracts/Comet.sol:1106 | needs-triage |  |
+| `7a2cdd47a113c89c` | dos-loops | MEDIUM | contracts/liquidator/Liquidator.sol:188 | needs-triage |  |
+| `7ba45055222e9223` | integer-overflow | MEDIUM | contracts/Comet.sol:504 | needs-triage |  |
+| `7d4544ee3fe386d9` | dos-loops | MEDIUM | contracts/Configurator.sol:244 | needs-triage |  |
+| `854524c7f4217d01` | integer-overflow | MEDIUM | contracts/Comet.sol:1106 | needs-triage |  |
+| `86468364f55a0a75` | storage-collision | HIGH | contracts/vendor/proxy/ERC1967/ERC1967Upgrade.sol:19 | needs-triage |  |
+| `86468364f55a0a75` | storage-collision | HIGH | contracts/vendor/proxy/ERC1967/ERC1967Upgrade.sol:19 | needs-triage |  |
+| `86bf82211a4d76c1` | storage-collision | HIGH | contracts/vendor/proxy/transparent/TransparentUpgradeableProxy.sol:29 | needs-triage |  |
+| `86bf82211a4d76c1` | storage-collision | CRITICAL | contracts/vendor/proxy/transparent/TransparentUpgradeableProxy.sol:29 | needs-triage |  |
+| `86bf82211a4d76c1` | storage-collision | HIGH | contracts/vendor/proxy/transparent/TransparentUpgradeableProxy.sol:29 | needs-triage |  |
+| `97edcf5471659002` | flash-loan | MEDIUM | contracts/Comet.sol:1034 | needs-triage |  |
+| `99d1439c735eb9a2` | unchecked-calls | MEDIUM | contracts/liquidator/vendor/@uniswap/v3-periphery/contracts/base/PeripheryPayments.sol:61 | needs-triage |  |
+| `a5b5ed4361223e54` | unchecked-erc20 | HIGH | contracts/liquidator/vendor/@uniswap/v3-periphery/contracts/base/PeripheryPayments.sol:61 | needs-triage |  |
+| `aa4713644fe5f631` | front-running | HIGH | contracts/Comet.sol:1241 | needs-triage |  |
+| `b96e2e66cb88d505` | integer-overflow | MEDIUM | contracts/Comet.sol:1131 | needs-triage |  |
+| `bc8c8fe33ed824b1` | unchecked-calls | MEDIUM | contracts/vendor/canonical-weth/contracts/WETH9.sol:45 | needs-triage |  |
+| `bc9c6f988fe6c58a` | integer-overflow | MEDIUM | contracts/CometExt.sol:91 | needs-triage |  |
+| `c173a88fe8b50756` | dos-loops | LOW | contracts/bridges/BaseBridgeReceiver.sol:155 | needs-triage |  |
+| `cabf70f55a24539f` | access-control | HIGH | contracts/Comet.sol:1026 | needs-triage |  |
+| `cc9a01973765f81d` | front-running | HIGH | contracts/liquidator/Liquidator.sol:188 | needs-triage |  |
+| `ccf5b33fe15a2f02` | unchecked-erc20 | MEDIUM | contracts/Comet.sol:1264 | needs-triage |  |
+| `dd2e86d77edeb326` | dos-loops | MEDIUM | contracts/bulkers/BaseBulker.sol:72 | needs-triage |  |
+| `e7362ee53e293e5b` | unchecked-erc20 | MEDIUM | contracts/bulkers/BaseBulker.sol:126 | needs-triage |  |
+| `e89107296e8ae4a2` | storage-collision | CRITICAL | contracts/Configurator.sol:8 | needs-triage |  |
+| `f65e3e9a0af65ee9` | flash-loan | HIGH | contracts/liquidator/Liquidator.sol:188 | needs-triage |  |
+| `f7815b61df10ce0b` | flash-loan | MEDIUM | contracts/liquidator/Liquidator.sol:131 | needs-triage |  |
+| `fd1f860950b57248` | storage-collision | HIGH | contracts/vendor/proxy/transparent/ProxyAdmin.sol:13 | needs-triage |  |
+| `fe68c9b6fdd36add` | integer-overflow | MEDIUM | contracts/bulkers/BaseBulker.sol:72 | needs-triage |  |

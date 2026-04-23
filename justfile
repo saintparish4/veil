@@ -31,6 +31,8 @@ bench-perf:
     cargo xtask perf
 
 # Precision on the pinned production-DeFi corpus (Phase 3).
+# `cargo xtask precision` auto-hydrates the vendor tree if it is empty
+# (see `--no-auto-fetch` to opt out) so this recipe stays shell-agnostic.
 bench-precision:
     cargo xtask precision
 

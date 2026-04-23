@@ -16,6 +16,7 @@ mod cmd {
     pub mod precision;
     pub mod recall;
     pub mod standards;
+    pub mod triage;
 }
 
 /// Top-level CLI parsed from `cargo xtask <subcommand> …`.
@@ -45,6 +46,8 @@ enum Command {
     Standards(cmd::standards::Args),
     /// Populate `benchmarks/vendor/` from the pinned SHAs in corpus.toml.
     Fetch(cmd::fetch::Args),
+    /// Classify precision findings into real / false-positive verdicts.
+    Triage(cmd::triage::Args),
 }
 
 fn main() -> Result<()> {
@@ -56,5 +59,6 @@ fn main() -> Result<()> {
         Command::Exploits(args) => cmd::exploits::run(args),
         Command::Standards(args) => cmd::standards::run(args),
         Command::Fetch(args) => cmd::fetch::run(args),
+        Command::Triage(args) => cmd::triage::run(args),
     }
 }
