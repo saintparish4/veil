@@ -78,6 +78,38 @@ The `just bench-precision` recipe auto-fetches the corpus on first run (shallow 
 
 ---
 
+## Historical exploits
+
+Veil flags the root-cause vulnerability in **12 of 14 reconstructed historical hacks** totalling **$1.63B of $1.84B** in losses (**88.5% coverage**). Each incident is a faithful minimum reconstruction from the verified on-chain source at the exploit block — not an SWC-style synthetic snippet — with ground truth pinned per-line in `expected.json` and a line-tolerance of ±2. Full headline in [`benchmarks/exploits/results/summary.md`](benchmarks/exploits/results/summary.md).
+
+- **CAUGHT**: The DAO (2016, $60M) — reentrancy at line 24
+- **CAUGHT**: King of the Ether Throne (2016, ~98 ETH silently dropped) — unchecked-calls at line 28
+- **CAUGHT**: GovernMental Ponzi (2016, ~1,100 ETH stuck) — timestamp-dependence at line 26
+- **MISSED (intended)**: Parity Multisig v1 (2017, $30M / 150k ETH) — detector roadmap
+- **CAUGHT**: Parity Multisig v2 (2017, $150M / 513k ETH frozen) — access-control at line 21
+- **CAUGHT**: SmartBillions Lottery (2017, ~$120k / 400 ETH) — unsafe-random at line 27
+- **CAUGHT**: BEC Token batchOverflow (2018, ~$70M paper) — integer-overflow at line 26
+- **CAUGHT**: bZx first flash-loan attack (2020, ~$350k) — flash-loan at line 25
+- **CAUGHT**: Harvest Finance (2020, $24M) — flash-loan at line 25
+- **CAUGHT**: Poly Network (2021, $611M returned) — access-control at line 23
+- **MISSED (intended)**: Beanstalk Farms (2022, $182M) — detector roadmap
+- **CAUGHT**: Nomad Bridge (2022, $190M) — unchecked-calls at line 29
+- **CAUGHT**: Wormhole Bridge (2022, $325M) — access-control at line 22
+- **CAUGHT**: Euler Finance (2023, $197M returned) — unchecked-calls at line 25
+
+**Intended misses.** The two `MISSED` entries deliberately preserve the real contract shape. Renaming `stalk.balanceOf(voter)` to `token.balanceOf(voter)` would flip Beanstalk to CAUGHT, and rewriting Parity v1's `fallback() { walletLib.delegatecall(msg.data); }` as a textbook `forward(address, bytes)` function would flip Parity v1 — both changes misrepresent the scanner rather than measure it. Each miss is annotated `INTENDED MISS:` in its `expected.json` with the exact detector gate that skips the real-world shape and the fix proposal tracked for a follow-up detector PR. See [`benchmarks/exploits/README.md`](benchmarks/exploits/README.md#intended-misses--detector-roadmap) for the roadmap.
+
+Reproduce:
+
+```bash
+just bench-exploits
+cat benchmarks/exploits/results/summary.md
+```
+
+All four artifacts (`summary.md`, `summary.json`, `misses.md`, `extras.md`) are byte-deterministic across runs — the corpus and ground truth are committed in full under `benchmarks/exploits/<YYYY-slug>/`, and the bench never fetches or compiles anything at runtime.
+
+---
+
 ## Installation
 
 ### Prerequisites
