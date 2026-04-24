@@ -95,7 +95,9 @@ pub fn run(args: Args) -> Result<()> {
         ));
     }
     if args.list_untriaged && args.list_all {
-        return Err(anyhow!("--list-untriaged and --list-all are mutually exclusive"));
+        return Err(anyhow!(
+            "--list-untriaged and --list-all are mutually exclusive"
+        ));
     }
 
     let root = workspace_root()?;
@@ -257,7 +259,9 @@ fn parse_set_entry(raw: &str) -> Result<ParsedSet> {
 }
 
 fn is_valid_id(s: &str) -> bool {
-    s.len() == 16 && s.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
+    s.len() == 16
+        && s.chars()
+            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c))
 }
 
 fn apply_sets(
@@ -323,8 +327,7 @@ fn apply_sets(
     if let Some(parent) = triage_path.parent() {
         fs::create_dir_all(parent).ok();
     }
-    fs::write(triage_path, json)
-        .with_context(|| format!("writing {}", triage_path.display()))?;
+    fs::write(triage_path, json).with_context(|| format!("writing {}", triage_path.display()))?;
 
     let total_classified = triage.len();
     let total_findings = findings.len();
@@ -391,7 +394,7 @@ mod tests {
     fn validates_hex() {
         assert!(is_valid_id("0123456789abcdef"));
         assert!(!is_valid_id("0123456789ABCDEF")); // uppercase rejected
-        assert!(!is_valid_id("0123456789abcde"));  // too short
+        assert!(!is_valid_id("0123456789abcde")); // too short
         assert!(!is_valid_id("0123456789abcdef0")); // too long
     }
 }

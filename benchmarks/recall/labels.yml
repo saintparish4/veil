@@ -1,0 +1,78 @@
+# Recall ground truth. Each entry: { file, detector_id, line, swc_id, notes }.
+# A finding matches a label iff file == file, detector_id == detector_id,
+# and |finding.line - label.line| <= 2.
+
+- file: recall/swc/SWC-107-reentrancy/simple_dao.sol
+  detector_id: reentrancy
+  line: 19
+  swc_id: SWC-107
+  notes: Canonical DAO-style external call before state write.
+
+- file: recall/swc/SWC-115-tx-origin/tx_origin.sol
+  detector_id: tx-origin
+  line: 12
+  swc_id: SWC-115
+  notes: require(tx.origin == owner) used for auth.
+
+- file: recall/swc/SWC-106-selfdestruct/mortal.sol
+  detector_id: access-control
+  line: 9
+  swc_id: SWC-106
+  notes: Unprotected selfdestruct; anyone can call kill().
+
+- file: recall/swc/SWC-112-delegatecall/proxy.sol
+  detector_id: dangerous-delegatecall
+  line: 14
+  swc_id: SWC-112
+  notes: target and data both user-controlled.
+
+- file: recall/swc/SWC-116-timestamp/roulette.sol
+  detector_id: timestamp-dependence
+  line: 17
+  swc_id: SWC-116
+  notes: block.timestamp used as entropy + payout condition.
+
+- file: recall/swc/SWC-120-weak-randomness/guess.sol
+  detector_id: unsafe-random
+  line: 11
+  swc_id: SWC-120
+  notes: keccak256(block.timestamp, block.difficulty) as RNG.
+
+- file: recall/swc/SWC-104-unchecked-call/king.sol
+  detector_id: unchecked-calls
+  line: 21
+  swc_id: SWC-104
+  notes: Low-level send/call return ignored.
+
+- file: recall/swc/SWC-128-dos-gas-limit/distribute.sol
+  detector_id: dos-loops
+  line: 18
+  swc_id: SWC-128
+  notes: Unbounded loop over attacker-controlled array.
+
+# Add SmartBugs curated entries below once  pinned the corpus:
+# - file: vendor/recall/smartbugs-curated/dataset/reentrancy/simple_dao.sol
+#   detector_id: reentrancy
+#   line: 19
+#   swc_id: SWC-107
+#   notes: Imported from SmartBugs; mirror of above.
+
+# ---------------------------------------------------------------------------
+# Intentional smoke-test label (DO NOT REMOVE).
+#
+# References a file that deliberately does not exist on disk. Kept in-tree so
+# every `cargo xtask recall` run continuously proves that the runner:
+#   1. emits a "labeled file not found on disk" warning on stderr,
+#   2. counts unmatched labels as misses,
+#   3. surfaces them in misses.md and drops `recall_pct` in summary.json.
+#
+# Current effect on the 9-label SWC corpus:
+#   - summary.md : labeled sites 9, caught 8, missed 1, recall 88.89%.
+#   - misses.md  : this exact row is listed.
+#   - stderr     : one "labeled file not found on disk" line.
+# ---------------------------------------------------------------------------
+- file: recall/swc/does-not-exist/fake_file.sol
+  detector_id: reentrancy
+  line: 42
+  swc_id: SWC-107
+  notes: Intentional miss -- proves missing-file warning + miss accounting.

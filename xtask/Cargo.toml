@@ -21,6 +21,7 @@ globset = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yml = { workspace = true }
 walkdir = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }

@@ -1,0 +1,65 @@
+{
+  "total_labels": 9,
+  "total_caught": 8,
+  "total_missed": 1,
+  "recall_pct": 88.88888888888889,
+  "per_detector": [
+    {
+      "detector_id": "access-control",
+      "expected": 1,
+      "caught": 1,
+      "missed": 0,
+      "recall_pct": 100.0
+    },
+    {
+      "detector_id": "dangerous-delegatecall",
+      "expected": 1,
+      "caught": 1,
+      "missed": 0,
+      "recall_pct": 100.0
+    },
+    {
+      "detector_id": "dos-loops",
+      "expected": 1,
+      "caught": 1,
+      "missed": 0,
+      "recall_pct": 100.0
+    },
+    {
+      "detector_id": "reentrancy",
+      "expected": 2,
+      "caught": 1,
+      "missed": 1,
+      "recall_pct": 50.0
+    },
+    {
+      "detector_id": "timestamp-dependence",
+      "expected": 1,
+      "caught": 1,
+      "missed": 0,
+      "recall_pct": 100.0
+    },
+    {
+      "detector_id": "tx-origin",
+      "expected": 1,
+      "caught": 1,
+      "missed": 0,
+      "recall_pct": 100.0
+    },
+    {
+      "detector_id": "unchecked-calls",
+      "expected": 1,
+      "caught": 1,
+      "missed": 0,
+      "recall_pct": 100.0
+    },
+    {
+      "detector_id": "unsafe-random",
+      "expected": 1,
+      "caught": 1,
+      "missed": 0,
+      "recall_pct": 100.0
+    }
+  ],
+  "extras_count": 8
+}

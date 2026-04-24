@@ -1,0 +1,22 @@
+# Recall corpus — labeled vulnerability sets fetched at pinned SHAs.
+#
+# Each entry follows the same contract as precision/corpus.toml. No include /
+# exclude globs here: the labels file is the source of truth for which files
+# get scanned. Everything else is ignored.
+
+schema_version = 1
+
+[[corpus]]
+name = "smartbugs-curated"
+url  = "https://github.com/smartbugs/smartbugs-curated"
+rev  = "main"   # pin to a SHA once you've selected labels (see STEP 7)
+
+[[corpus]]
+name = "smartbugs-wild"
+url  = "https://github.com/smartbugs/smartbugs-wild"
+rev  = "master" # optional; large (~50k files). Enable on-demand.
+
+[[corpus]]
+name = "not-so-smart-contracts"
+url  = "https://github.com/crytic/not-so-smart-contracts"
+rev  = "master"

@@ -1,42 +1,43 @@
 <#
 .SYNOPSIS
-  Clone the Veil precision corpus at pinned revs.
+  Clone pinned Veil corpora into benchmarks\vendor\<family>\<name>\.
 .DESCRIPTION
-  Same contract as fetch-corpora.sh. Idempotent; pass -Update to force
-  re-fetch even when the resolved SHA is current.
+  Same contract as fetch-corpora.sh. `-Corpus` picks the family
+  (all | precision | recall). Idempotent; pass `-Update` to force re-fetch
+  even when the resolved SHA is current. The TSV (family, name, url, rev)
+  comes from `cargo xtask fetch --emit-tsv`, so the canonical corpus
+  schema lives in benchmarks\<family>\corpus.toml — not in this script.
 #>
 [CmdletBinding()]
 param(
+  [ValidateSet('all','precision','recall')]
+  [string]$Corpus = 'all',
   [switch]$Update
 )
 
 $ErrorActionPreference = 'Stop'
-$Root       = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$CorpusToml = Join-Path $Root 'benchmarks\precision\corpus.toml'
-$VendorDir  = Join-Path $Root 'benchmarks\vendor\precision'
+$Root      = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$VendorRt  = Join-Path $Root 'benchmarks\vendor'
+New-Item -ItemType Directory -Force $VendorRt | Out-Null
 
-if (-not (Test-Path $CorpusToml)) {
-  Write-Error "fetch-corpora: missing $CorpusToml"
-  exit 1
-}
-
-New-Item -ItemType Directory -Force $VendorDir | Out-Null
-
-# Ask xtask to parse the TOML and emit TSV: name<TAB>url<TAB>rev.
-$tsv = & cargo run --quiet -p xtask -- fetch --emit-tsv
+# xtask emits: family<TAB>name<TAB>url<TAB>rev (one row per corpus entry).
+$tsv = & cargo run --quiet -p xtask -- fetch --corpus $Corpus --emit-tsv
 if ($LASTEXITCODE -ne 0) { throw 'xtask fetch --emit-tsv failed' }
 
 foreach ($line in $tsv -split "`r?`n") {
   if (-not $line) { continue }
   $parts = $line -split "`t"
-  if ($parts.Count -ne 3) { continue }
-  $name, $url, $rev = $parts
+  if ($parts.Count -ne 4) { continue }
+  $family, $name, $url, $rev = $parts
 
-  $target       = Join-Path $VendorDir $name
+  $familyDir    = Join-Path $VendorRt $family
+  New-Item -ItemType Directory -Force $familyDir | Out-Null
+  $target       = Join-Path $familyDir $name
   $resolvedFile = Join-Path $target '.veil-resolved-sha'
+
   if ((Test-Path $resolvedFile) -and (-not $Update)) {
     $existing = (Get-Content $resolvedFile).Trim().Substring(0, 12)
-    Write-Host "fetch-corpora: $name — already at $existing (skip; use -Update to bump)"
+    Write-Host "fetch-corpora: $family/$name — already at $existing (skip; use -Update to bump)"
     continue
   }
 
@@ -55,7 +56,7 @@ foreach ($line in $tsv -split "`r?`n") {
     Pop-Location
   }
   $short = (Get-Content $resolvedFile).Trim().Substring(0, 12)
-  Write-Host "fetch-corpora: $name — $rev → $short"
+  Write-Host "fetch-corpora: $family/$name — $rev → $short"
 }
 
-Write-Host "fetch-corpora: done (vendor tree at $VendorDir)"
+Write-Host "fetch-corpora: done (vendor tree at $VendorRt)"

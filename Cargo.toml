@@ -14,6 +14,9 @@ repository = "https://github.com/saintparish4/veil"
 # Core deps (used by `veil` and re-used by `xtask`).
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+# YAML parser for recall ground-truth labels (benchmarks/recall/labels.yml).
+# Active fork of the deprecated `serde_yaml`; API is the same subset we use.
+serde_yml = "0.0.12"
 walkdir = "2.5.0"
 tracing = "0.1.44"
 clap = { version = "4", features = ["derive"] }
