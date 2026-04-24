@@ -41,7 +41,40 @@ Veil scans each Solidity fixture in a **median of ~4.0 ms** (p99 **< 10 ms**) ac
 just bench-perf
 ```
 
-Numbers come from Criterion's `scan_file/*` group driven through `veil::scan::scan_file_with` — the same entry point the `veil` binary uses. Three synthetic fixtures (`synth-small`/`medium`/`large`, up to 80 KB) are excluded from the headline p99 since `synth-large` is deliberately oversized for scaling studies; see [`benchmarks/perf/README.md`](benchmarks/perf/README.md) for the full per-fixture breakdown. A full-corpus wall-time number will land once the precision corpus is vendored in Phase 3 of the proof-points plan.
+Numbers come from Criterion's `scan_file/*` group driven through `veil::scan::scan_file_with` — the same entry point the `veil` binary uses. Three synthetic fixtures (`synth-small`/`medium`/`large`, up to 80 KB) are excluded from the headline p99 since `synth-large` is deliberately oversized for scaling studies; see [`benchmarks/perf/README.md`](benchmarks/perf/README.md) for the full per-fixture breakdown.
+
+---
+
+## Precision
+
+Veil is measured against a corpus of **526 Solidity files (~20.4k LOC)** across **eight audited production-DeFi repositories**, each pinned to an immutable commit SHA resolved from its upstream release tag:
+
+| Corpus | Rev | Files |
+|--------|-----|------:|
+| [openzeppelin-contracts](https://github.com/OpenZeppelin/openzeppelin-contracts) | `v5.0.2` | 142 |
+| [lido-core](https://github.com/lidofinance/core) | `v2.2.0` | 75 |
+| [aave-v3-core](https://github.com/aave/aave-v3-core) | `v1.19.3` | 77 |
+| [balancer-v2-vault](https://github.com/balancer/balancer-v2-monorepo) | `vault-deployment` | 68 |
+| [compound-v3-comet](https://github.com/compound-finance/comet) | `audit/oz/original-weth-proposal` | 63 |
+| [uniswap-v3-periphery](https://github.com/Uniswap/v3-periphery) | `v1.3.0` | 52 |
+| [uniswap-v3-core](https://github.com/Uniswap/v3-core) | `v1.0.0` | 33 |
+| [makerdao-dss](https://github.com/makerdao/dss) | `master` | 16 |
+| **Total** | — | **526** |
+
+Resolved SHAs are recorded per-corpus at `benchmarks/vendor/precision/<name>/.veil-resolved-sha` for the audit trail; the canonical `rev` list lives in [`benchmarks/precision/corpus.toml`](benchmarks/precision/corpus.toml).
+
+**Methodology.** Precision = `real / (real + false_positive)`, measured over every finding Veil emits on the corpus. Findings awaiting triage do not contribute to either numerator or denominator and cause CI to fail unless `--allow-untriaged` is passed — i.e. "unclassified" is never silently counted as either signal or noise. Ground-truth verdicts follow the rules in [`benchmarks/precision/README.md`](benchmarks/precision/README.md).
+
+**Current status.** The corpus is vendored and the scanner emitted **404 findings** across 526 files on the pinned SHAs (see [`benchmarks/precision/results/summary.json`](benchmarks/precision/results/summary.json) and [`summary.md`](benchmarks/precision/results/summary.md)). Triage is in progress; the aggregate precision percentage will be published here once every finding has a `real` / `false-positive` verdict committed under `benchmarks/precision/triage/`.
+
+Reproduce:
+
+```bash
+just bench-precision
+cat benchmarks/precision/results/summary.md
+```
+
+The `just bench-precision` recipe auto-fetches the corpus on first run (shallow clones pinned to the resolved SHA) and is idempotent thereafter. `benchmarks/vendor/` stays gitignored; CI re-fetches each nightly run.
 
 ---
 
