@@ -392,16 +392,19 @@ impl ReportGenerator for PdfReport {
 
 /// Minimal HTML escaping for untrusted strings inserted into templates.
 fn escape_html(s: &str) -> String {
+    // I added &#39; last so the chain doesn't re-escape the & I just inserted
+    // for the other replacements. Order: & MUST ALWAYS BE FIRST.
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+        .replace('\'', "&#39;")
 }
 
 /// No-dep base64 encoder (RFC 4648).
 fn base64_encode(data: &[u8]) -> String {
     const TABLE: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
         let b0 = chunk[0] as u32;
         let b1 = chunk.get(1).copied().unwrap_or(0) as u32;

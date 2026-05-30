@@ -64,20 +64,17 @@ impl Detector for StorageCollisionDetector {
                 && !contract_text.contains("initializer")
                 && !contract_text.contains("_initialized")
             {
-                findings.push(Finding {
-                    id: String::new(),
-                    detector_id: self.id().to_string(),
-                    severity: Severity::Critical,
-                    confidence: Confidence::Medium,
-                    line,
-                    vulnerability_type: "Unprotected Initializer".to_string(),
-                    message: "Initialize function without initializer modifier".to_string(),
-                    suggestion: "Use OpenZeppelin's Initializable and add initializer modifier"
-                        .to_string(),
-                    remediation: None,
-                    owasp_category: self.owasp_category().map(|s| s.to_string()),
-                    file: None,
-                });
+                // I use Critical severity here via from_detector this is the only 
+                // pattern in this detector that warrants it; re-initialization in a 
+                // live proxy can be an immediate takeover vector
+               findings.push(Finding::from_detector(
+                self,
+                line,
+                Confidence::Medium,
+                "Unprotected Initializer",
+                "Initialize function without initializer modifier".to_string(),
+                "Use OpenZeppelin's Initializable and add initializer modifier",
+               ));
             }
 
             // Pattern 3: Constructor in upgradeable contract
@@ -114,20 +111,17 @@ impl Detector for StorageCollisionDetector {
                     || body_text.contains("0x7050c9");
 
                 if !uses_eip1967 {
-                    findings.push(Finding {
-                        id: String::new(),
-                        detector_id: self.id().to_string(),
-                        severity: Severity::Medium,
-                        confidence: Confidence::Low,
-                        line: func.start_position().row + 1,
-                        vulnerability_type: "Non-Standard Storage Slot".to_string(),
-                        message: "Direct storage access without EIP-1967 standard slots"
-                            .to_string(),
-                        suggestion: "Use EIP-1967 standard slots for proxy storage".to_string(),
-                        remediation: None,
-                        owasp_category: self.owasp_category().map(|s| s.to_string()),
-                        file: None,
-                    });
+                    // I use func.start_position().row + 1 instead of the outer `line` because 
+                    // this loop iterates functions independently, I want the line of the 
+                    // offending function, not the contract node
+                    findings.push(Finding::from_detector(
+                        self,
+                        func.start_position().row + 1,
+                        Confidence::Low,
+                        "Non-Standard Storage Slot",
+                        "Direct storage access without EIP-1967 standard slots".to_string(),
+                        "Use EIP-1967 standard slots for proxy storage",
+                    )); 
                 }
             }
         }

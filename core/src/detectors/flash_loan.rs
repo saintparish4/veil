@@ -73,24 +73,19 @@ impl Detector for FlashLoanDetector {
                     || name.contains("withdraw");
 
                 if is_sensitive {
-                    findings.push(Finding {
-                        id: String::new(),
-                        detector_id: self.id().to_string(),
-                        severity: Severity::Medium,
-                        confidence: Confidence::Low,
+                    // I keep confidence Low here because balance-check heuristics fire on
+                    // legitimate defensive code too: false-positive rate is meaningful.
+                    findings.push(Finding::from_detector(
+                        self,
                         line,
-                        vulnerability_type: "Flash Loan Susceptible".to_string(),
-                        message: format!(
+                        Confidence::Low,
+                        "Flash Loan Susceptible",
+                        format!(
                             "Function '{}' uses balance checks that could be manipulated",
                             name
                         ),
-                        suggestion:
-                            "Consider adding flash loan guards or using time-weighted values"
-                                .to_string(),
-                        remediation: None,
-                        owasp_category: self.owasp_category().map(|s| s.to_string()),
-                        file: None,
-                    });
+                        "Consider adding flash loan guards or using time-weighted values",
+                    ));
                 }
             }
 

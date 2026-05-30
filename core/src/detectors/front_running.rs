@@ -22,7 +22,10 @@ impl Detector for FrontRunningDetector {
         Severity::Medium
     }
     fn owasp_category(&self) -> Option<&'static str> {
-        Some("SC09:2025 - Denial of Service (DoS) Attacks")
+        // I corrected this from SC09 (DoS) front-running is about transaction
+        // ordering exposing sensitive on-chain data/state to MEV actors, which
+        // maps to SCO4 (Sensitive On-Chain Data Exposure), not DoS
+        Some("SC04:2025 - Sensitive On-Chain Data Exposure")
     }
     fn run(&self, ctx: &AnalysisContext<'_>, findings: &mut Vec<Finding>) {
         for func in &ctx.functions {
@@ -72,21 +75,17 @@ impl Detector for FrontRunningDetector {
                     || func_text.contains("deadline");
 
                 if !has_slippage {
-                    findings.push(Finding {
-                        id: String::new(),
-                        detector_id: self.id().to_string(),
-                        severity: Severity::High,
-                        confidence: Confidence::High,
+                    // I bump confidence to High because the absence of any slippage param
+                    // in the function signature is a strong signal, I checked the AST-level
+                    // func_text rather than just body, so parameter names are included
+                    findings.push(Finding::from_detector(
+                        self,
                         line,
-                        vulnerability_type: "Missing Slippage Protection".to_string(),
-                        message: "Swap function without minimum output amount".to_string(),
-                        suggestion:
-                            "Add minAmountOut parameter and deadline for sandwich attack protection"
-                                .to_string(),
-                        remediation: None,
-                        owasp_category: self.owasp_category().map(|s| s.to_string()),
-                        file: None,
-                    });
+                        Confidence::High,
+                        "Missing Slippage Protection",
+                        "Swap function without minimum output amount".to_string(),
+                        "Add minAmountOut parameter and deadline for sandwich attack protection",
+                    ));
                 }
             }
 
@@ -104,23 +103,14 @@ impl Detector for FrontRunningDetector {
                     || func_text.contains("maxSlippage");
 
                 if !has_slippage {
-                    findings.push(Finding {
-                        id: String::new(),
-                        detector_id: self.id().to_string(),
-                        severity: Severity::High,
-                        confidence: Confidence::High,
+                    findings.push(Finding::from_detector(
+                        self,
                         line,
-                        vulnerability_type: "Missing Slippage Protection".to_string(),
-                        message:
-                            "Withdraw function using price calculations without slippage protection"
-                                .to_string(),
-                        suggestion:
-                            "Add minAmountOut parameter and deadline for sandwich attack protection"
-                                .to_string(),
-                        remediation: None,
-                        owasp_category: self.owasp_category().map(|s| s.to_string()),
-                        file: None,
-                    });
+                        Confidence::High,
+                        "Missing Slippage Protection",
+                        "Withdraw function using price calculations without slippage protection".to_string(),
+                        "Add minAmountOut parameter and deadline for sandwich attack protection",
+                    ));
                 }
             }
 
@@ -158,21 +148,17 @@ impl Detector for FrontRunningDetector {
                     && !has_whitelist
                     && (body_text.contains("maxSupply") || body_text.contains("limit"))
                 {
-                    findings.push(Finding {
-                        id: String::new(),
-                        detector_id: self.id().to_string(),
-                        severity: Severity::Low,
-                        confidence: Confidence::Low,
+                    // I keep Low/Low here, this pattern fires on any supply-capped mint
+                    // that lacks access control, which includes plenty of intentional
+                    // public sales. It's informational, not a hard stop
+                    findings.push(Finding::from_detector(
+                        self,
                         line,
-                        vulnerability_type: "Front-Runnable Mint".to_string(),
-                        message: "First-come-first-serve mint vulnerable to front-running"
-                            .to_string(),
-                        suggestion: "Consider merkle proof whitelist or signature-based minting"
-                            .to_string(),
-                        remediation: None,
-                        owasp_category: self.owasp_category().map(|s| s.to_string()),
-                        file: None,
-                    });
+                        Confidence::Low,
+                        "Front-Runnable Mint",
+                        "First-come-first-serve mint vulnerable to front-running".to_string(),
+                        "Consider merkle proof whitelist or signature-based minting", 
+                    )); 
                 }
             }
 
@@ -184,21 +170,14 @@ impl Detector for FrontRunningDetector {
                     || body_text.contains("discount");
 
                 if has_incentive {
-                    findings.push(Finding {
-                        id: String::new(),
-                        detector_id: self.id().to_string(),
-                        severity: Severity::Low,
-                        confidence: Confidence::Low,
+                    findings.push(Finding::from_detector(
+                        self,
                         line,
-                        vulnerability_type: "Liquidation MEV".to_string(),
-                        message: "Liquidation with bonus is attractive to MEV searchers"
-                            .to_string(),
-                        suggestion: "Consider using Flashbots Protect or MEV-aware design"
-                            .to_string(),
-                        remediation: None,
-                        owasp_category: self.owasp_category().map(|s| s.to_string()),
-                        file: None,
-                    });
+                        Confidence::Low,
+                        "Liquidation MEV",
+                        "Liquidation with bonus is attractive to MEV searchers".to_string(),
+                        "Consider using Flashbots Protect or MEV-aware design",
+                    ));
                 }
             }
         }

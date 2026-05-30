@@ -20,7 +20,6 @@ pub fn new_solidity_parser() -> Result<tree_sitter::Parser, String> {
 
 /// Scan a single file using the provided registry.
 /// Returns `ScanOutcome` containing findings and any errors encountered.
-#[must_use]
 pub fn scan_file_with(
     file_path: &str,
     registry: &DetectorRegistry,
@@ -89,7 +88,6 @@ pub fn scan_file_with(
 
 /// Scan a directory (optionally recursive) using a shared parser and registry.
 /// Returns aggregated `ScanOutcome` across all files.
-#[must_use]
 pub fn scan_directory_with(
     dir_path: &str,
     recursive: bool,

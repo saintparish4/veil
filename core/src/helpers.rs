@@ -77,30 +77,6 @@ pub fn visibility_adjusted_confidence(base: Confidence, visibility: Visibility) 
     }
 }
 
-/// Extract function visibility from function text (string-based, kept for legacy tests)
-pub fn get_function_visibility(func_text: &str) -> Visibility {
-    let signature_end = func_text.find('{').unwrap_or(func_text.len());
-    let signature = &func_text[..signature_end];
-    if signature.contains(" private")
-        || signature.contains("\tprivate")
-        || signature.contains("(private")
-    {
-        Visibility::Private
-    } else if signature.contains(" internal")
-        || signature.contains("\tinternal")
-        || signature.contains("(internal")
-    {
-        Visibility::Internal
-    } else if signature.contains(" external")
-        || signature.contains("\texternal")
-        || signature.contains("(external")
-    {
-        Visibility::External
-    } else {
-        Visibility::Public
-    }
-}
-
 /// Normalize vulnerability type for matching (suppression, baseline)
 pub fn normalize_vuln_type(s: &str) -> String {
     s.to_lowercase().replace(['-', '_'], " ")

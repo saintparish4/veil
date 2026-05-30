@@ -1168,6 +1168,7 @@ contract A {
     }
 
     #[test]
+    #[ignore] // I use this as a manual inspection tool, run with: cargo test -- --ignored ast_dump_call_patterns --nocapture
     fn ast_dump_call_patterns() {
         let source = r#"pragma solidity ^0.8.0;
 contract Test {

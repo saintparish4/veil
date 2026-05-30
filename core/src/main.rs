@@ -223,26 +223,6 @@ mod tests {
     }
 
     #[test]
-    fn test_visibility_detection() {
-        assert_eq!(
-            get_function_visibility("function foo() public { }"),
-            Visibility::Public
-        );
-        assert_eq!(
-            get_function_visibility("function foo() external { }"),
-            Visibility::External
-        );
-        assert_eq!(
-            get_function_visibility("function foo() internal { }"),
-            Visibility::Internal
-        );
-        assert_eq!(
-            get_function_visibility("function foo() private { }"),
-            Visibility::Private
-        );
-    }
-
-    #[test]
     fn test_visibility_confidence_adjustment() {
         assert_eq!(
             visibility_adjusted_confidence(Confidence::High, Visibility::Public),
