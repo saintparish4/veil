@@ -5,6 +5,8 @@
 use crate::detector_trait::{AnalysisContext, DetectorRegistry};
 use crate::suppression;
 use crate::types::{Finding, ScanError, ScanErrorKind, ScanOutcome, Severity, Statistics};
+use rayon::prelude::*;
+use std::cell::RefCell;
 use std::fs;
 use std::time::Instant;
 use walkdir::WalkDir;
@@ -16,6 +18,13 @@ pub fn new_solidity_parser() -> Result<tree_sitter::Parser, String> {
         .set_language(&tree_sitter_solidity::LANGUAGE.into())
         .map_err(|e| format!("Failed to load Solidity grammar: {}", e))?;
     Ok(parser)
+}
+
+// I keep one Parser per rayon worker thread because tree_sitter::Parser is !Send.
+// The thread_local gives each worker its own instance with zero lock contention
+thread_local! {
+    static PARSER: RefCell<tree_sitter::Parser> =
+    RefCell::new(new_solidity_parser().expect("Solidity grammar load failed at thread int"));
 }
 
 /// Scan a single file using the provided registry.
@@ -86,28 +95,48 @@ pub fn scan_file_with(
     }
 }
 
-/// Scan a directory (optionally recursive) using a shared parser and registry.
-/// Returns aggregated `ScanOutcome` across all files.
+/// Scan a directory (optionally recursive) using the provided registry
+/// Files are scanned in parallel; each rayon worker uses its own thread-local Parser
+/// Returns aggregated `ScanOutcome` across all files
 pub fn scan_directory_with(
     dir_path: &str,
     recursive: bool,
     registry: &DetectorRegistry,
-    parser: &mut tree_sitter::Parser,
 ) -> ScanOutcome {
     let walker = if recursive {
         WalkDir::new(dir_path)
     } else {
         WalkDir::new(dir_path).max_depth(1)
     };
+
+    // I collect paths first so rayon can divide the work evenly before any I/O starts
+    let paths: Vec<String> = walker
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            let p = e.path();
+            p.is_file() && p.extension().is_some_and(|ext| ext == "sol")
+        })
+        .filter_map(|e| e.path().to_str().map(|s| s.to_string()))
+        .collect();
+
+    let partial_outcomes: Vec<ScanOutcome> = paths
+        .par_iter()
+        .map(|path_str| {
+            // I borrow the thread-local parser mutably inside the closure
+            // RefCell::borrow_mut() panics if called re-entrantly on the same thread,
+            // but rayon never runs two tasks on the same thread simultaneously, so this is safe
+            PARSER.with(|cell| {
+                let mut parser = cell.borrow_mut();
+                scan_file_with(path_str, registry, &mut parser)
+            })
+        })
+        .collect();
+
     let mut outcome = ScanOutcome::default();
-    for entry in walker.into_iter().filter_map(|e| e.ok()) {
-        let p = entry.path();
-        if p.is_file() && p.extension().is_some_and(|e| e == "sol") {
-            let path_str = p.to_str().unwrap_or_default();
-            let file_outcome = scan_file_with(path_str, registry, parser);
-            outcome.findings.extend(file_outcome.findings);
-            outcome.errors.extend(file_outcome.errors);
-        }
+    for partial in partial_outcomes {
+        outcome.findings.extend(partial.findings);
+        outcome.errors.extend(partial.errors);
     }
     outcome
 }

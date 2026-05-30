@@ -1353,6 +1353,7 @@ dependencies = [
  "insta",
  "predicates",
  "proptest",
+ "rayon",
  "serde",
  "serde_json",
  "sha2",

@@ -82,7 +82,9 @@ fn main() {
 
             let registry = build_registry();
             let outcome = if Path::new(&path).is_dir() {
-                scan_directory_with(&path, recursive, &registry, &mut parser)
+                // I no longer pass `parser` here because scan_directory_with manages its own
+                // thread-local parsers internally for parallel execution
+                scan_directory_with(&path, recursive, &registry)
             } else {
                 scan_file_with(&path, &registry, &mut parser)
             };

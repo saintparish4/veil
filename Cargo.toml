@@ -33,6 +33,7 @@ sha2 = "0.11.0"
 colored = "3.1.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ts-rs = { version = "12.0.1", features = ["serde-compat"] }
+rayon = "1.10.0"
 
 # Dev deps shared across members.
 insta = { version = "1", features = ["json"] }
