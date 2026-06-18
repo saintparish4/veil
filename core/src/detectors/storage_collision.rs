@@ -64,17 +64,20 @@ impl Detector for StorageCollisionDetector {
                 && !contract_text.contains("initializer")
                 && !contract_text.contains("_initialized")
             {
-                // I use Critical severity here via from_detector this is the only 
-                // pattern in this detector that warrants it; re-initialization in a 
-                // live proxy can be an immediate takeover vector
-               findings.push(Finding::from_detector(
-                self,
-                line,
-                Confidence::Medium,
-                "Unprotected Initializer",
-                "Initialize function without initializer modifier".to_string(),
-                "Use OpenZeppelin's Initializable and add initializer modifier",
-               ));
+                // Critical severity (overriding the detector's High default): this is
+                // the only pattern in this detector that warrants it; re-initialization
+                // in a live proxy can be an immediate takeover vector.
+                findings.push(
+                    Finding::from_detector(
+                        self,
+                        line,
+                        Confidence::Medium,
+                        "Unprotected Initializer",
+                        "Initialize function without initializer modifier".to_string(),
+                        "Use OpenZeppelin's Initializable and add initializer modifier",
+                    )
+                    .with_severity(Severity::Critical),
+                );
             }
 
             // Pattern 3: Constructor in upgradeable contract
@@ -111,17 +114,19 @@ impl Detector for StorageCollisionDetector {
                     || body_text.contains("0x7050c9");
 
                 if !uses_eip1967 {
-                    // I use func.start_position().row + 1 instead of the outer `line` because 
-                    // this loop iterates functions independently, I want the line of the 
-                    // offending function, not the contract node
-                    findings.push(Finding::from_detector(
-                        self,
-                        func.start_position().row + 1,
-                        Confidence::Low,
-                        "Non-Standard Storage Slot",
-                        "Direct storage access without EIP-1967 standard slots".to_string(),
-                        "Use EIP-1967 standard slots for proxy storage",
-                    )); 
+                    // Use the offending function's line, not the outer contract `line`:
+                    // this loop iterates functions independently.
+                    findings.push(
+                        Finding::from_detector(
+                            self,
+                            func.start_position().row + 1,
+                            Confidence::Low,
+                            "Non-Standard Storage Slot",
+                            "Direct storage access without EIP-1967 standard slots".to_string(),
+                            "Use EIP-1967 standard slots for proxy storage",
+                        )
+                        .with_severity(Severity::Medium),
+                    );
                 }
             }
         }

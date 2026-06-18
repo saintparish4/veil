@@ -75,17 +75,20 @@ impl Detector for FlashLoanDetector {
                 if is_sensitive {
                     // I keep confidence Low here because balance-check heuristics fire on
                     // legitimate defensive code too: false-positive rate is meaningful.
-                    findings.push(Finding::from_detector(
-                        self,
-                        line,
-                        Confidence::Low,
-                        "Flash Loan Susceptible",
-                        format!(
-                            "Function '{}' uses balance checks that could be manipulated",
-                            name
-                        ),
-                        "Consider adding flash loan guards or using time-weighted values",
-                    ));
+                    findings.push(
+                        Finding::from_detector(
+                            self,
+                            line,
+                            Confidence::Low,
+                            "Flash Loan Susceptible",
+                            format!(
+                                "Function '{}' uses balance checks that could be manipulated",
+                                name
+                            ),
+                            "Consider adding flash loan guards or using time-weighted values",
+                        )
+                        .with_severity(Severity::Medium),
+                    );
                 }
             }
 

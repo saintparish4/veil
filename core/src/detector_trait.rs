@@ -113,6 +113,17 @@ impl Finding {
             file: None,
         }
     }
+
+    /// Override the severity on a finding built via [`Finding::from_detector`].
+    ///
+    /// Use when a detector emits findings at a severity that differs from its
+    /// default (e.g. a `Medium`-default detector raising a specific pattern to
+    /// `High`). Keeps the derived `detector_id`/`owasp_category` boilerplate.
+    #[must_use]
+    pub fn with_severity(mut self, severity: Severity) -> Self {
+        self.severity = severity;
+        self
+    }
 }
 
 // ---------------------------------------------------------------------------

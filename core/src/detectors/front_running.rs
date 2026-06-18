@@ -75,17 +75,20 @@ impl Detector for FrontRunningDetector {
                     || func_text.contains("deadline");
 
                 if !has_slippage {
-                    // I bump confidence to High because the absence of any slippage param
-                    // in the function signature is a strong signal, I checked the AST-level
-                    // func_text rather than just body, so parameter names are included
-                    findings.push(Finding::from_detector(
-                        self,
-                        line,
-                        Confidence::High,
-                        "Missing Slippage Protection",
-                        "Swap function without minimum output amount".to_string(),
-                        "Add minAmountOut parameter and deadline for sandwich attack protection",
-                    ));
+                    // High confidence: absence of any slippage param in the function
+                    // signature is a strong signal. func_text (not just body) is checked
+                    // so parameter names are included. Severity overrides the Medium default.
+                    findings.push(
+                        Finding::from_detector(
+                            self,
+                            line,
+                            Confidence::High,
+                            "Missing Slippage Protection",
+                            "Swap function without minimum output amount".to_string(),
+                            "Add minAmountOut parameter and deadline for sandwich attack protection",
+                        )
+                        .with_severity(Severity::High),
+                    );
                 }
             }
 
@@ -103,14 +106,17 @@ impl Detector for FrontRunningDetector {
                     || func_text.contains("maxSlippage");
 
                 if !has_slippage {
-                    findings.push(Finding::from_detector(
-                        self,
-                        line,
-                        Confidence::High,
-                        "Missing Slippage Protection",
-                        "Withdraw function using price calculations without slippage protection".to_string(),
-                        "Add minAmountOut parameter and deadline for sandwich attack protection",
-                    ));
+                    findings.push(
+                        Finding::from_detector(
+                            self,
+                            line,
+                            Confidence::High,
+                            "Missing Slippage Protection",
+                            "Withdraw function using price calculations without slippage protection".to_string(),
+                            "Add minAmountOut parameter and deadline for sandwich attack protection",
+                        )
+                        .with_severity(Severity::High),
+                    );
                 }
             }
 
@@ -148,17 +154,20 @@ impl Detector for FrontRunningDetector {
                     && !has_whitelist
                     && (body_text.contains("maxSupply") || body_text.contains("limit"))
                 {
-                    // I keep Low/Low here, this pattern fires on any supply-capped mint
-                    // that lacks access control, which includes plenty of intentional
-                    // public sales. It's informational, not a hard stop
-                    findings.push(Finding::from_detector(
-                        self,
-                        line,
-                        Confidence::Low,
-                        "Front-Runnable Mint",
-                        "First-come-first-serve mint vulnerable to front-running".to_string(),
-                        "Consider merkle proof whitelist or signature-based minting", 
-                    )); 
+                    // Low/Low: this pattern fires on any supply-capped mint that lacks
+                    // access control, which includes plenty of intentional public sales.
+                    // It's informational, not a hard stop. Severity overrides Medium default.
+                    findings.push(
+                        Finding::from_detector(
+                            self,
+                            line,
+                            Confidence::Low,
+                            "Front-Runnable Mint",
+                            "First-come-first-serve mint vulnerable to front-running".to_string(),
+                            "Consider merkle proof whitelist or signature-based minting",
+                        )
+                        .with_severity(Severity::Low),
+                    );
                 }
             }
 
@@ -170,14 +179,17 @@ impl Detector for FrontRunningDetector {
                     || body_text.contains("discount");
 
                 if has_incentive {
-                    findings.push(Finding::from_detector(
-                        self,
-                        line,
-                        Confidence::Low,
-                        "Liquidation MEV",
-                        "Liquidation with bonus is attractive to MEV searchers".to_string(),
-                        "Consider using Flashbots Protect or MEV-aware design",
-                    ));
+                    findings.push(
+                        Finding::from_detector(
+                            self,
+                            line,
+                            Confidence::Low,
+                            "Liquidation MEV",
+                            "Liquidation with bonus is attractive to MEV searchers".to_string(),
+                            "Consider using Flashbots Protect or MEV-aware design",
+                        )
+                        .with_severity(Severity::Low),
+                    );
                 }
             }
         }

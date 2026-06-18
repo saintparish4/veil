@@ -534,6 +534,8 @@ mod tests {
             "&lt;script&gt;alert(1)&lt;/script&gt;"
         );
         assert_eq!(escape_html("a & b"), "a &amp; b");
+        // Single quotes must be escaped to stay safe inside single-quoted attributes.
+        assert_eq!(escape_html("it's"), "it&#39;s");
     }
 
     #[test]
