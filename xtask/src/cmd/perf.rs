@@ -208,7 +208,7 @@ fn collect_into(dir: &Path, out: &mut Vec<BenchEntry>) -> Result<()> {
         let path = entry.path();
         // Only consume the ones under `<bench>/new/` — the group-level one
         // lives directly under `<group>/` (depth mismatch).
-        let parent = path.parent().map(|p| p.file_name()).flatten();
+        let parent = path.parent().and_then(|p| p.file_name());
         if parent.map(|n| n != "new").unwrap_or(true) {
             continue;
         }
@@ -476,7 +476,7 @@ fn run_slither_comparison(workspace: &Path, results_dir: &Path, allow_missing: b
     let mut md = String::new();
     md.push_str("# Perf comparison — Veil vs Slither\n\n");
     md.push_str(&format!("Generated: {}\n\n", now_iso8601()));
-    md.push_str(&format!("Corpus: `benchmarks/vendor/precision/`\n\n"));
+    md.push_str("Corpus: `benchmarks/vendor/precision/`\n\n");
     md.push_str("| Tool    | Wall time           | Exit code |\n");
     md.push_str("|---------|---------------------|-----------|\n");
     md.push_str(&format!(
