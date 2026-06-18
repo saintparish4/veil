@@ -2,6 +2,14 @@
 resolver = "2"
 members = ["core", "xtask"]
 
+# Optimize the distributed binary: full LTO + a single codegen unit maximize
+# runtime speed (the scanner's headline is sub-10ms per file), and stripping
+# symbols keeps the release artifact small for downloads.
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
 [workspace.package]
 version = "0.1.0"
 edition = "2021"

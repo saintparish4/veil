@@ -11,6 +11,16 @@ documentation = "https://github.com/saintparish4/veil"
 readme = "../README.md"
 keywords = ["solidity", "security", "scanner", "static-analysis", "ethereum"]
 categories = ["development-tools", "cryptography::cryptocurrencies"]
+# The package ships two bins (veil, codegen); make `cargo run -p veil` and
+# `cargo install` resolve to the scanner without an explicit --bin.
+default-run = "veil"
+
+# Lets `cargo binstall veil` fetch the prebuilt release archives produced by
+# .github/workflows/release.yml instead of compiling from source. The asset
+# naming here must match the `archive: veil-$target` in that workflow.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
+bin-dir = "{ bin }{ binary-ext }"
 
 [lib]
 name = "veil"

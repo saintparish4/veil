@@ -1,0 +1,54 @@
+name: Release
+
+# Build and publish prebuilt `veil` binaries whenever a version tag is pushed:
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Each target is built on a native runner so tree-sitter's bundled C grammar
+# compiles without cross-compilation. The action archives the binary (tar.gz on
+# unix, zip on windows), generates a SHA-256 checksum, and attaches everything
+# to the GitHub Release for the tag (creating it if it does not exist).
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  upload-binaries:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One target failing (e.g. a temporarily unavailable runner) must not
+      # block the others from publishing.
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+          - target: x86_64-apple-darwin
+            os: macos-13
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        run: rustup update stable && rustup default stable
+      - name: Build and upload veil
+        uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: veil
+          target: ${{ matrix.target }}
+          archive: veil-$target
+          checksum: sha256
+          token: ${{ secrets.GITHUB_TOKEN }}

@@ -112,24 +112,43 @@ All four artifacts (`summary.md`, `summary.json`, `misses.md`, `extras.md`) are 
 
 ## Installation
 
-### Prerequisites
+### Download a prebuilt binary (recommended)
 
-- Rust 1.75+ ([install](https://rustup.rs))
+Grab the archive for your platform from the [latest release](https://github.com/saintparish4/veil/releases/latest) — no Rust toolchain required. Binaries are published for Linux (x86_64, arm64), macOS (Intel, Apple Silicon), and Windows (x86_64), each with a SHA-256 checksum.
+
+```bash
+# Linux x86_64 example
+curl -sSL https://github.com/saintparish4/veil/releases/latest/download/veil-x86_64-unknown-linux-gnu.tar.gz | tar xz
+./veil --version
+```
+
+### Install with Cargo
+
+```bash
+# From the git repository (no crates.io publish required)
+cargo install --git https://github.com/saintparish4/veil veil
+```
+
+Once Veil is published to crates.io you can also use [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) to fetch the prebuilt binary directly:
+
+```bash
+cargo binstall veil
+```
 
 ### Build from source
+
+Requires Rust 1.75+ ([install](https://rustup.rs)).
 
 ```bash
 git clone https://github.com/saintparish4/veil
 cd veil
-cargo build --release
+cargo build --release   # binary at target/release/veil
 ```
-
-The `veil` binary will be at `target/release/veil`.
 
 ### Run without installing
 
 ```bash
-cargo run --features cli -- scan <path>
+cargo run -p veil -- scan <path>
 ```
 
 ---
