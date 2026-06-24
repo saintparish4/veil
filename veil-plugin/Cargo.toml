@@ -1,0 +1,13 @@
+[package]
+name = "veil-plugin"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Public API for authoring custom veil detectors as Rust workspace members"
+
+[dependencies]
+veil = { path = "../core" }
+serde.workspace = true
+tree-sitter.workspace = true

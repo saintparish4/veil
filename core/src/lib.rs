@@ -9,13 +9,19 @@
 
 pub mod ast_utils;
 pub mod cfg;
+pub mod defi_patterns;
 pub mod detector_trait;
 pub mod detectors;
+pub mod diff;
 pub mod helpers;
+pub mod interprocedural;
 pub mod output;
 pub mod report;
+pub mod rule_engine;
 pub mod scan;
+pub mod storage_model;
 pub mod suppression;
+pub mod suppression_rules;
 pub mod taint;
 pub mod types;
 

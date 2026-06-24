@@ -2,7 +2,12 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use std::path::Path;
 use veil::detectors::build_registry;
-use veil::scan::{exit_code_for_stats, new_solidity_parser};
+use veil::diff::{diff_scans, load_scan_json};
+use veil::scan::{
+    exit_code_for_stats, new_solidity_parser, scan_directory_with_patterns,
+    scan_file_with_patterns,
+};
+use veil::suppression_rules::load_project_rules;
 use veil::*;
 
 #[derive(Parser)]
@@ -21,6 +26,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Scan a Solidity file or directory for vulnerabilities.
     Scan {
         path: String,
         #[arg(short, long, default_value = "terminal")]
@@ -29,17 +35,62 @@ enum Commands {
         recursive: bool,
         #[arg(long)]
         baseline: Option<String>,
-        /// Generate a report in the given format (html or pdf)
+        /// Generate a report in the given format (html or pdf).
         /// Output is written to stdout; redirect to a file:
-        /// veil scan contracts/ --recursive --report html > report.html
+        ///   veil scan contracts/ --recursive --report html > report.html
         #[arg(long, value_name = "FORMAT", value_parser = ["html", "pdf"])]
         report: Option<String>,
-        /// Path to a logo image (PNG, SVG, JPEG) for white-label reports
+        /// Path to a logo image (PNG, SVG, JPEG) for white-label reports.
         #[arg(long, value_name = "PATH")]
         logo: Option<String>,
-        /// Organization name displayed in the report header
+        /// Organization name displayed in the report header.
         #[arg(long = "org-name", value_name = "NAME")]
         org_name: Option<String>,
+        /// Suppress application of TOML rules from `.veil/rules/` (load them but skip).
+        #[arg(long)]
+        no_rules: bool,
+    },
+    /// Analyse EVM bytecode for vulnerabilities invisible at the Solidity AST level.
+    ///
+    /// Accepts raw hex bytecode (with or without 0x prefix) directly or as a file path.
+    /// Use --sourcemap to correlate findings with Solidity source lines.
+    ///
+    /// Examples:
+    ///   veil evm 0x6060... --format terminal
+    ///   veil evm MyContract.bin --sourcemap MyContract.json --source contracts/MyContract.sol
+    Evm {
+        /// Bytecode to analyse: a hex string (0x…) or a path to a binary/hex file.
+        bytecode: String,
+        /// Path to a solc source-map JSON file for source correlation.
+        #[arg(long, value_name = "FILE")]
+        sourcemap: Option<String>,
+        /// Path to the Solidity source file (for line-number resolution).
+        #[arg(long, value_name = "FILE")]
+        source: Option<String>,
+        /// Output format: `terminal` (default) or `json`.
+        #[arg(short, long, default_value = "terminal")]
+        format: String,
+    },
+    /// Compare two JSON scan outputs and show new/fixed findings.
+    ///
+    /// Reads the JSON produced by `veil scan --format json` and diffs them by
+    /// finding identity (SHA-256 of file:line:detector_id).
+    ///
+    /// Exit codes:
+    ///   0 = no new findings (or all fixed)
+    ///   1 = new findings introduced
+    Diff {
+        /// Path to the baseline scan JSON (before).
+        before: String,
+        /// Path to the new scan JSON (after).
+        after: String,
+        /// Output format: `json` (default) or `terminal`.
+        #[arg(short, long, default_value = "json")]
+        format: String,
+        /// Exit 1 only when new findings at or above this risk threshold appear.
+        /// Risk = critical×100 + high×10 + medium×3 + low×1 per finding.
+        #[arg(long, value_name = "SCORE")]
+        min_risk: Option<i64>,
     },
 }
 
@@ -58,6 +109,134 @@ fn init_tracing(verbose: bool) {
         .init();
 }
 
+fn run_evm_command(
+    bytecode_arg: String,
+    sourcemap_path: Option<String>,
+    source_path: Option<String>,
+    format: &str,
+) {
+    use veil_evm::basic_block::build_basic_blocks;
+    use veil_evm::cfg::EvmCfg;
+    use veil_evm::detectors::{detect_delegatecall_from_storage, detect_unprotected_selfdestruct};
+    use veil_evm::disasm::disassemble;
+    use veil_evm::source_map::parse_source_map;
+
+    // 1. Load bytecode (file or inline hex string)
+    let hex_str: String = if std::path::Path::new(&bytecode_arg).exists() {
+        match std::fs::read_to_string(&bytecode_arg) {
+            Ok(s) => s.trim().to_string(),
+            Err(e) => {
+                eprintln!("{} Cannot read bytecode file: {}", "Error:".red().bold(), e);
+                std::process::exit(1);
+            }
+        }
+    } else {
+        bytecode_arg.clone()
+    };
+
+    let hex_str = hex_str.trim_start_matches("0x");
+    let bytecode: Vec<u8> = match (0..hex_str.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&hex_str[i..i + 2], 16))
+        .collect::<Result<Vec<_>, _>>()
+    {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("{} Invalid hex bytecode: {}", "Error:".red().bold(), e);
+            std::process::exit(1);
+        }
+    };
+
+    if bytecode.is_empty() {
+        eprintln!("{} Empty bytecode", "Error:".red().bold());
+        std::process::exit(1);
+    }
+
+    // 2. Disassemble and build CFG
+    let instructions = disassemble(&bytecode);
+    let blocks = build_basic_blocks(&instructions);
+    let cfg = EvmCfg::build(blocks);
+
+    // 3. Run EVM detectors
+    let mut evm_findings = detect_delegatecall_from_storage(&cfg);
+    evm_findings.extend(detect_unprotected_selfdestruct(&instructions));
+
+    // 4. Apply source map correlation if provided
+    let source_text = source_path
+        .as_deref()
+        .and_then(|p| std::fs::read_to_string(p).ok());
+
+    let source_map_entries = sourcemap_path
+        .as_deref()
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .map(|s| parse_source_map(&s));
+
+    if let (Some(ref sm), Some(ref src)) = (&source_map_entries, &source_text) {
+        for finding in &mut evm_findings {
+            if let Some(line) =
+                veil_evm::bridge::correlate_offset_to_line(sm, finding.bytecode_offset, src)
+            {
+                finding.line = Some(line);
+                finding.file = source_path.clone();
+            }
+        }
+    }
+
+    // 5. Output
+    if evm_findings.is_empty() {
+        if format == "json" {
+            println!("{{\"findings\":[]}}");
+        } else {
+            println!("{}", "No EVM-level findings.".green());
+        }
+        return;
+    }
+
+    if format == "json" {
+        let json_findings: Vec<_> = evm_findings
+            .iter()
+            .map(|f| {
+                serde_json::json!({
+                    "detector_id": f.detector_id,
+                    "severity": f.severity,
+                    "message": f.message,
+                    "bytecode_offset": format!("0x{:x}", f.bytecode_offset),
+                    "line": f.line,
+                    "file": f.file,
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({ "findings": json_findings }))
+                .unwrap_or_default()
+        );
+    } else {
+        println!("\n{}\n", "Veil EVM Analysis".bold().underline());
+        println!(
+            "  {} finding(s) in {} bytes of bytecode\n",
+            evm_findings.len().to_string().red().bold(),
+            bytecode.len()
+        );
+        for f in &evm_findings {
+            let loc = match (&f.file, f.line) {
+                (Some(file), Some(line)) => format!(" ({}:{})", file, line),
+                (None, Some(line)) => format!(" (line {})", line),
+                _ => format!(" (bytecode offset 0x{:x})", f.bytecode_offset),
+            };
+            println!(
+                "  [{}] {}{}",
+                f.severity.red().bold(),
+                f.detector_id,
+                loc
+            );
+            println!("    {}\n", f.message);
+        }
+    }
+
+    std::process::exit(if evm_findings.is_empty() { 0 } else { 2 });
+}
+
 fn main() {
     let cli = Cli::parse();
     init_tracing(cli.verbose);
@@ -71,6 +250,7 @@ fn main() {
             report,
             logo,
             org_name,
+            no_rules,
         } => {
             let mut parser = match new_solidity_parser() {
                 Ok(p) => p,
@@ -81,12 +261,22 @@ fn main() {
             };
 
             let registry = build_registry();
-            let outcome = if Path::new(&path).is_dir() {
-                // I no longer pass `parser` here because scan_directory_with manages its own
-                // thread-local parsers internally for parallel execution
-                scan_directory_with(&path, recursive, &registry)
+
+            // Load TOML rules up front so pattern rules run inside the scan (no second parse pass).
+            let loaded_rules = if no_rules {
+                veil::suppression_rules::LoadedRules::default()
             } else {
-                scan_file_with(&path, &registry, &mut parser)
+                load_project_rules(&path)
+            };
+
+            if !loaded_rules.patterns.is_empty() {
+                tracing::debug!(count = loaded_rules.patterns.len(), "TOML pattern rules active");
+            }
+
+            let outcome = if Path::new(&path).is_dir() {
+                scan_directory_with_patterns(&path, recursive, &registry, &loaded_rules.patterns)
+            } else {
+                scan_file_with_patterns(&path, &registry, &mut parser, &loaded_rules.patterns)
             };
 
             for err in &outcome.errors {
@@ -98,6 +288,12 @@ fn main() {
             if let Some(ref baseline_path) = baseline {
                 let baseline_set = load_baseline(baseline_path);
                 findings = filter_findings_by_baseline(findings, &baseline_set);
+            }
+
+            // Apply TOML suppression rules (pattern rules already ran inside the scan).
+            if !loaded_rules.suppression.is_empty() {
+                tracing::debug!(count = loaded_rules.suppression.len(), "applying TOML suppression rules");
+                findings = veil::suppression_rules::filter_findings_by_rules(findings, &loaded_rules.suppression);
             }
 
             let stats = calculate_statistics(&findings);
@@ -136,6 +332,96 @@ fn main() {
             }
 
             std::process::exit(exit_code_for_stats(&stats));
+        }
+
+        Commands::Evm {
+            bytecode,
+            sourcemap,
+            source,
+            format,
+        } => {
+            run_evm_command(bytecode, sourcemap, source, &format);
+        }
+
+        Commands::Diff {
+            before,
+            after,
+            format,
+            min_risk,
+        } => {
+            let before_findings = match load_scan_json(&before) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("{} {}", "Error:".red().bold(), e);
+                    std::process::exit(2);
+                }
+            };
+            let after_findings = match load_scan_json(&after) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("{} {}", "Error:".red().bold(), e);
+                    std::process::exit(2);
+                }
+            };
+
+            let diff = diff_scans(&before_findings, &after_findings);
+
+            match format.as_str() {
+                "json" => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&diff).unwrap_or_default()
+                    );
+                }
+                _ => {
+                    let new_n = diff.new_findings.len();
+                    let fixed_n = diff.fixed_findings.len();
+                    let delta = diff.risk_delta.delta;
+                    println!(
+                        "\n{}\n",
+                        "Veil Audit Diff".bold().underline()
+                    );
+                    println!(
+                        "  {} new findings    {} fixed findings",
+                        new_n.to_string().red().bold(),
+                        fixed_n.to_string().green().bold()
+                    );
+                    println!(
+                        "  Risk score: {} → {} (Δ{}) — {}",
+                        diff.risk_delta.before,
+                        diff.risk_delta.after,
+                        delta,
+                        diff.risk_delta.assessment.bold()
+                    );
+                    if !diff.new_findings.is_empty() {
+                        println!("\n{}", "New findings:".bold());
+                        for f in &diff.new_findings {
+                            println!(
+                                "  [{:?}] {} — {} (line {}{})",
+                                f.severity,
+                                f.detector_id,
+                                f.vulnerability_type,
+                                f.line,
+                                f.file
+                                    .as_deref()
+                                    .map(|p| format!(" in {}", p))
+                                    .unwrap_or_default()
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Exit 1 if any new findings are present (or above min_risk threshold)
+            let new_risk: i64 = diff
+                .new_findings
+                .iter()
+                .map(|f| veil::diff::risk_score(std::slice::from_ref(f)))
+                .sum();
+            let threshold = min_risk.unwrap_or(1);
+            if new_risk >= threshold {
+                std::process::exit(1);
+            }
         }
     }
 }

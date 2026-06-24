@@ -212,6 +212,7 @@ mod tests {
         BasicBlock {
             id: BasicBlockId(id as usize),
             statements,
+            storage_ops: vec![],
             successors: successors
                 .into_iter()
                 .map(|u| BasicBlockId(u as usize))
@@ -245,10 +246,12 @@ mod tests {
                         CfgStatement::ExternalCall {
                             byte_offset: 10,
                             line: 5,
+                            meta: None,
                         },
                         CfgStatement::StateWrite {
                             byte_offset: 20,
                             line: 6,
+                            slot: None,
                         },
                     ],
                     vec![2],
@@ -276,6 +279,7 @@ mod tests {
                     vec![CfgStatement::ExternalCall {
                         byte_offset: 10,
                         line: 5,
+                        meta: None,
                     }],
                     vec![2],
                     vec![0],
@@ -294,6 +298,7 @@ mod tests {
                     vec![CfgStatement::StateWrite {
                         byte_offset: 25,
                         line: 8,
+                        slot: None,
                     }],
                     vec![],
                     vec![2],
@@ -322,10 +327,12 @@ mod tests {
                         CfgStatement::ExternalCall {
                             byte_offset: 10,
                             line: 5,
+                            meta: None,
                         },
                         CfgStatement::StateWrite {
                             byte_offset: 20,
                             line: 6,
+                            slot: None,
                         },
                     ],
                     vec![3],
@@ -336,6 +343,7 @@ mod tests {
                     vec![CfgStatement::StateWrite {
                         byte_offset: 30,
                         line: 10,
+                        slot: None,
                     }],
                     vec![3],
                     vec![0],
@@ -366,6 +374,7 @@ mod tests {
                     vec![CfgStatement::ExternalCall {
                         byte_offset: 10,
                         line: 7,
+                        meta: None,
                     }],
                     vec![1],
                     vec![1],
@@ -375,6 +384,7 @@ mod tests {
                     vec![CfgStatement::StateWrite {
                         byte_offset: 20,
                         line: 10,
+                        slot: None,
                     }],
                     vec![],
                     vec![1],
@@ -401,6 +411,7 @@ mod tests {
                     vec![CfgStatement::StateWrite {
                         byte_offset: 10,
                         line: 5,
+                        slot: None,
                     }],
                     vec![2],
                     vec![0],
@@ -411,6 +422,7 @@ mod tests {
                     vec![CfgStatement::ExternalCall {
                         byte_offset: 99,
                         line: 99,
+                        meta: None,
                     }],
                     vec![],
                     vec![],
@@ -435,10 +447,12 @@ mod tests {
                         CfgStatement::ExternalCall {
                             byte_offset: 10,
                             line: 5,
+                            meta: None,
                         },
                         CfgStatement::StateWrite {
                             byte_offset: 15,
                             line: 6,
+                            slot: None,
                         },
                     ],
                     vec![3],
@@ -450,10 +464,12 @@ mod tests {
                         CfgStatement::ExternalCall {
                             byte_offset: 20,
                             line: 8,
+                            meta: None,
                         },
                         CfgStatement::StateWrite {
                             byte_offset: 25,
                             line: 9,
+                            slot: None,
                         },
                     ],
                     vec![3],
@@ -479,6 +495,7 @@ mod tests {
                     vec![CfgStatement::StateWrite {
                         byte_offset: 10,
                         line: 5,
+                        slot: None,
                     }],
                     vec![],
                     vec![0],

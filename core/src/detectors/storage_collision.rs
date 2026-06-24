@@ -4,7 +4,8 @@
 //! upgradeable contracts, and non-EIP-1967 storage slot access.
 //! Uses AST contract_declaration and function_definition nodes.
 
-use crate::ast_utils::{find_nodes_of_kind, func_body, is_proxy_contract, node_text};
+use crate::ast_utils::{find_nodes_of_kind, func_body, node_text};
+use crate::defi_patterns::ContractRole;
 use crate::detector_trait::{AnalysisContext, Detector};
 use crate::types::{Confidence, Finding, Severity};
 
@@ -24,10 +25,12 @@ impl Detector for StorageCollisionDetector {
         Some("SC08:2025 - Insecure Smart Contract Composition")
     }
     fn run(&self, ctx: &AnalysisContext<'_>, findings: &mut Vec<Finding>) {
-        let root = ctx.tree.root_node();
-        if !is_proxy_contract(&root, ctx.source) {
+        // Only analyse proxy contracts; use the pre-computed contract_role to avoid
+        // re-scanning the AST and to benefit from the richer defi_patterns heuristic.
+        if !matches!(ctx.contract_role, ContractRole::UpgradeableProxy) {
             return;
         }
+        let root = ctx.tree.root_node();
 
         let contracts = find_nodes_of_kind(&root, "contract_declaration");
         for contract in &contracts {
