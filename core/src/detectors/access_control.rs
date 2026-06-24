@@ -257,10 +257,7 @@ impl Detector for AccessControlDetector {
             };
 
             // AST fallback for Check 1 when CFG is not available.
-            if !used_cfg_for_check1
-                && has_sensitive_operation(&body, ctx.source)
-                && !has_ac
-            {
+            if !used_cfg_for_check1 && has_sensitive_operation(&body, ctx.source) && !has_ac {
                 if should_skip_access_control_warning(name, func_text) {
                     continue;
                 }

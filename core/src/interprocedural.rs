@@ -73,9 +73,7 @@ pub fn build_summaries(ctx: &AnalysisContext) -> HashMap<String, FunctionSummary
 // ---------------------------------------------------------------------------
 
 fn summarize_function(func: &Node, source: &str) -> FunctionSummary {
-    let name = function_name(func, source)
-        .unwrap_or("")
-        .to_string();
+    let name = function_name(func, source).unwrap_or("").to_string();
 
     let modifiers = function_modifiers(func, source)
         .into_iter()

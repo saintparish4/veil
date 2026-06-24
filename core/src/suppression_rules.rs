@@ -290,7 +290,12 @@ mod tests {
     #[test]
     fn file_filter_applied() {
         let r = rule("reentrancy", None, Some("receivers/"), None);
-        let in_receivers = finding("reentrancy", "Reentrancy", Some("src/receivers/Foo.sol"), "");
+        let in_receivers = finding(
+            "reentrancy",
+            "Reentrancy",
+            Some("src/receivers/Foo.sol"),
+            "",
+        );
         let elsewhere = finding("reentrancy", "Reentrancy", Some("src/core/Vault.sol"), "");
         assert!(rule_matches(&r, &in_receivers));
         assert!(!rule_matches(&r, &elsewhere));
@@ -299,8 +304,18 @@ mod tests {
     #[test]
     fn function_name_filter_from_message() {
         let r = rule("reentrancy", Some("Callback"), None, None);
-        let cb = finding("reentrancy", "Reentrancy", None, "External call at line 10, state change at line 12 -- in uniswapV2Callback");
-        let normal = finding("reentrancy", "Reentrancy", None, "External call at line 10, state change at line 12");
+        let cb = finding(
+            "reentrancy",
+            "Reentrancy",
+            None,
+            "External call at line 10, state change at line 12 -- in uniswapV2Callback",
+        );
+        let normal = finding(
+            "reentrancy",
+            "Reentrancy",
+            None,
+            "External call at line 10, state change at line 12",
+        );
         assert!(rule_matches(&r, &cb));
         assert!(!rule_matches(&r, &normal));
     }

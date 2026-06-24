@@ -82,8 +82,24 @@ mod tests {
         let sm = "0:10:0:i;20:5:0:-;::-1:-";
         let entries = parse_source_map(sm);
         assert_eq!(entries.len(), 3);
-        assert_eq!(entries[0], SourceMapEntry { src_offset: 0, src_length: 10, file_index: 0, jump: 'i' });
-        assert_eq!(entries[1], SourceMapEntry { src_offset: 20, src_length: 5, file_index: 0, jump: '-' });
+        assert_eq!(
+            entries[0],
+            SourceMapEntry {
+                src_offset: 0,
+                src_length: 10,
+                file_index: 0,
+                jump: 'i'
+            }
+        );
+        assert_eq!(
+            entries[1],
+            SourceMapEntry {
+                src_offset: 20,
+                src_length: 5,
+                file_index: 0,
+                jump: '-'
+            }
+        );
         // Third entry: all fields empty → inherit from prev, except file_index=-1
         assert_eq!(entries[2].src_offset, 20);
         assert_eq!(entries[2].file_index, -1);

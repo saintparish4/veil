@@ -138,9 +138,7 @@ impl<'a> Parser<'a> {
         } else {
             Err(format!(
                 "Expected '{}' at position {} in: {}",
-                ch,
-                self.pos,
-                self.input
+                ch, self.pos, self.input
             ))
         }
     }
@@ -443,8 +441,9 @@ mod tests {
 
     #[test]
     fn parse_or_and_nesting() {
-        let pred =
-            parse_ok("is_external OR (function_name_contains('admin') AND NOT has_modifier('onlyOwner'))");
+        let pred = parse_ok(
+            "is_external OR (function_name_contains('admin') AND NOT has_modifier('onlyOwner'))",
+        );
         assert!(matches!(pred, Predicate::Or(_, _)));
     }
 
@@ -464,7 +463,7 @@ mod tests {
         assert!(parse_predicate("is_external blah").is_err());
     }
 
-    fn get_funcs<'a>(tree: &'a tree_sitter::Tree, src: &'a str) -> Vec<tree_sitter::Node<'a>> {
+    fn get_funcs<'a>(tree: &'a tree_sitter::Tree, _src: &'a str) -> Vec<tree_sitter::Node<'a>> {
         crate::ast_utils::find_nodes_of_kind(&tree.root_node(), "function_definition")
     }
 
@@ -504,7 +503,11 @@ contract C {
             .iter()
             .filter(|f| eval_predicate(&pred, f, src))
             .collect();
-        assert_eq!(unprotected.len(), 1, "only publicFunc should lack onlyOwner");
+        assert_eq!(
+            unprotected.len(),
+            1,
+            "only publicFunc should lack onlyOwner"
+        );
     }
 
     #[test]
@@ -525,10 +528,7 @@ contract C {
             .filter(|f| eval_predicate(&pred, f, src))
             .collect();
         assert_eq!(flagged.len(), 1);
-        assert_eq!(
-            function_name(&flagged[0], src).unwrap_or(""),
-            "swap"
-        );
+        assert_eq!(function_name(flagged[0], src).unwrap_or(""), "swap");
     }
 
     #[test]

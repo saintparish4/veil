@@ -19,23 +19,23 @@ pub struct EvmCfg {
 impl EvmCfg {
     /// Build an EVM CFG from a flat list of basic blocks.
     pub fn build(blocks: Vec<EvmBasicBlock>) -> Self {
-        let block_map: HashMap<usize, EvmBasicBlock> = blocks
-            .into_iter()
-            .map(|b| (b.start_offset, b))
-            .collect();
+        let block_map: HashMap<usize, EvmBasicBlock> =
+            blocks.into_iter().map(|b| (b.start_offset, b)).collect();
 
         let mut edges: HashMap<usize, Vec<usize>> = HashMap::new();
 
         // Collect all JUMPDEST offsets (valid jump targets).
-        let jumpdests: std::collections::HashSet<usize> =
-            block_map.keys().copied().collect();
+        let jumpdests: std::collections::HashSet<usize> = block_map.keys().copied().collect();
 
         for (offset, block) in &block_map {
             let succs = successors_of(block, &jumpdests);
             edges.insert(*offset, succs);
         }
 
-        Self { blocks: block_map, edges }
+        Self {
+            blocks: block_map,
+            edges,
+        }
     }
 
     /// Returns all blocks that contain a `DELEGATECALL` instruction.
@@ -53,7 +53,10 @@ impl EvmCfg {
 }
 
 /// Compute successor offsets for a basic block.
-fn successors_of(block: &EvmBasicBlock, jumpdests: &std::collections::HashSet<usize>) -> Vec<usize> {
+fn successors_of(
+    block: &EvmBasicBlock,
+    jumpdests: &std::collections::HashSet<usize>,
+) -> Vec<usize> {
     let mut succs = Vec::new();
 
     let Some(term) = block.terminator() else {

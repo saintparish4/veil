@@ -4,8 +4,7 @@ use std::path::Path;
 use veil::detectors::build_registry;
 use veil::diff::{diff_scans, load_scan_json};
 use veil::scan::{
-    exit_code_for_stats, new_solidity_parser, scan_directory_with_patterns,
-    scan_file_with_patterns,
+    exit_code_for_stats, new_solidity_parser, scan_directory_with_patterns, scan_file_with_patterns,
 };
 use veil::suppression_rules::load_project_rules;
 use veil::*;
@@ -224,12 +223,7 @@ fn run_evm_command(
                 (None, Some(line)) => format!(" (line {})", line),
                 _ => format!(" (bytecode offset 0x{:x})", f.bytecode_offset),
             };
-            println!(
-                "  [{}] {}{}",
-                f.severity.red().bold(),
-                f.detector_id,
-                loc
-            );
+            println!("  [{}] {}{}", f.severity.red().bold(), f.detector_id, loc);
             println!("    {}\n", f.message);
         }
     }
@@ -270,7 +264,10 @@ fn main() {
             };
 
             if !loaded_rules.patterns.is_empty() {
-                tracing::debug!(count = loaded_rules.patterns.len(), "TOML pattern rules active");
+                tracing::debug!(
+                    count = loaded_rules.patterns.len(),
+                    "TOML pattern rules active"
+                );
             }
 
             let outcome = if Path::new(&path).is_dir() {
@@ -292,8 +289,14 @@ fn main() {
 
             // Apply TOML suppression rules (pattern rules already ran inside the scan).
             if !loaded_rules.suppression.is_empty() {
-                tracing::debug!(count = loaded_rules.suppression.len(), "applying TOML suppression rules");
-                findings = veil::suppression_rules::filter_findings_by_rules(findings, &loaded_rules.suppression);
+                tracing::debug!(
+                    count = loaded_rules.suppression.len(),
+                    "applying TOML suppression rules"
+                );
+                findings = veil::suppression_rules::filter_findings_by_rules(
+                    findings,
+                    &loaded_rules.suppression,
+                );
             }
 
             let stats = calculate_statistics(&findings);
@@ -377,10 +380,7 @@ fn main() {
                     let new_n = diff.new_findings.len();
                     let fixed_n = diff.fixed_findings.len();
                     let delta = diff.risk_delta.delta;
-                    println!(
-                        "\n{}\n",
-                        "Veil Audit Diff".bold().underline()
-                    );
+                    println!("\n{}\n", "Veil Audit Diff".bold().underline());
                     println!(
                         "  {} new findings    {} fixed findings",
                         new_n.to_string().red().bold(),

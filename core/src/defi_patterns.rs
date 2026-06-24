@@ -86,13 +86,13 @@ pub fn classify_contract_role(root: &Node, source: &str) -> ContractRole {
 /// These are entry points *called by the lending pool*, not by end users.
 /// They are not traditional attack surface in the same way as public user-facing functions.
 const FLASH_LOAN_RECEIVER_NAMES: &[&str] = &[
-    "executeOperation",      // Aave V2/V3
-    "onFlashLoan",           // ERC-3156 (MakerDAO, Euler, dYdX, EIP-3156)
+    "executeOperation",       // Aave V2/V3
+    "onFlashLoan",            // ERC-3156 (MakerDAO, Euler, dYdX, EIP-3156)
     "uniswapV3FlashCallback", // Uniswap V3 flash
-    "receiveFlashLoan",      // Balancer
-    "executeFlashLoan",      // CREAM Finance
-    "flashLoanCallback",     // Generic / custom
-    "callbackFromFlashLoan", // Generic
+    "receiveFlashLoan",       // Balancer
+    "executeFlashLoan",       // CREAM Finance
+    "flashLoanCallback",      // Generic / custom
+    "callbackFromFlashLoan",  // Generic
 ];
 
 /// Returns `true` if `func` is a known flash-loan callback entry point.
@@ -113,14 +113,14 @@ pub fn is_flash_loan_receiver(func: &Node, source: &str) -> bool {
 
 /// Known Uniswap and major fork DEX callback function names.
 const UNISWAP_CALLBACK_NAMES: &[&str] = &[
-    "uniswapV2Call",         // Uniswap V2
-    "uniswapV3SwapCallback", // Uniswap V3 swap
-    "uniswapV3MintCallback", // Uniswap V3 mint
-    "uniswapV3BurnCallback", // Uniswap V3 burn
+    "uniswapV2Call",          // Uniswap V2
+    "uniswapV3SwapCallback",  // Uniswap V3 swap
+    "uniswapV3MintCallback",  // Uniswap V3 mint
+    "uniswapV3BurnCallback",  // Uniswap V3 burn
     "uniswapV3FlashCallback", // Uniswap V3 flash
-    "pancakeCall",           // PancakeSwap (V2 fork)
-    "sushiswapV2Call",       // SushiSwap
-    "algebraSwapCallback",   // Algebra (QuickSwap V3)
+    "pancakeCall",            // PancakeSwap (V2 fork)
+    "sushiswapV2Call",        // SushiSwap
+    "algebraSwapCallback",    // Algebra (QuickSwap V3)
 ];
 
 /// Returns `true` if `func` is a Uniswap-style DEX callback.
@@ -259,7 +259,8 @@ mod tests {
 
     #[test]
     fn ordinary_withdraw_is_not_flash_loan_receiver() {
-        let src = "pragma solidity ^0.8.0; contract C { function withdraw(uint256 amount) external {} }";
+        let src =
+            "pragma solidity ^0.8.0; contract C { function withdraw(uint256 amount) external {} }";
         let tree = parse(src);
         let funcs = find_nodes_of_kind(&tree.root_node(), "function_definition");
         assert!(

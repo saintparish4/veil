@@ -53,10 +53,9 @@ struct ScanOutput {
 ///
 /// Returns `Err` with a human-readable message on parse/IO failure.
 pub fn load_scan_json(path: &str) -> Result<Vec<Finding>, String> {
-    let content = fs::read_to_string(path)
-        .map_err(|e| format!("Cannot read '{}': {}", path, e))?;
-    let output: ScanOutput = serde_json::from_str(&content)
-        .map_err(|e| format!("Invalid JSON in '{}': {}", path, e))?;
+    let content = fs::read_to_string(path).map_err(|e| format!("Cannot read '{}': {}", path, e))?;
+    let output: ScanOutput =
+        serde_json::from_str(&content).map_err(|e| format!("Invalid JSON in '{}': {}", path, e))?;
     Ok(output.findings)
 }
 
@@ -244,9 +243,9 @@ mod tests {
         let low_low = finding("d", Severity::Low, Confidence::Low);
 
         assert_eq!(finding_risk(&critical_high), 100); // 100 × 100% = 100
-        assert_eq!(finding_risk(&high_high), 10);      // 10 × 100% = 10
-        assert_eq!(finding_risk(&medium_medium), 2);   // 3 × 67% = 2.01 → 2
-        assert_eq!(finding_risk(&low_low), 0);         // 1 × 33% = 0.33 → 0
+        assert_eq!(finding_risk(&high_high), 10); // 10 × 100% = 10
+        assert_eq!(finding_risk(&medium_medium), 2); // 3 × 67% = 2.01 → 2
+        assert_eq!(finding_risk(&low_low), 0); // 1 × 33% = 0.33 → 0
     }
 
     #[test]

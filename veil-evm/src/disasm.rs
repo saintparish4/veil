@@ -152,10 +152,7 @@ impl Instruction {
     /// True for opcodes that terminate basic blocks: JUMP, JUMPI, STOP, RETURN, REVERT,
     /// INVALID, SELFDESTRUCT.
     pub fn is_terminator(&self) -> bool {
-        matches!(
-            self.opcode,
-            0x00 | 0x56 | 0x57 | 0xf3 | 0xfd | 0xfe | 0xff
-        )
+        matches!(self.opcode, 0x00 | 0x56 | 0x57 | 0xf3 | 0xfd | 0xfe | 0xff)
     }
 
     /// True when this instruction is a `DELEGATECALL` (opcode 0xf4).

@@ -1,5 +1,7 @@
-use crate::ast_utils::{find_nodes_of_kind, func_body, get_call_target, is_external_call,
-    is_state_write, node_text, CallTarget};
+use crate::ast_utils::{
+    find_nodes_of_kind, func_body, get_call_target, is_external_call, is_state_write, node_text,
+    CallTarget,
+};
 use smallvec::SmallVec;
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -160,7 +162,9 @@ impl fmt::Display for CfgStatement {
             CfgStatement::Emit { line, .. } => write!(f, "Emit(line {})", line),
             CfgStatement::Return { byte_offset } => write!(f, "Return(byte {})", byte_offset),
             CfgStatement::Revert { byte_offset } => write!(f, "Revert(byte {})", byte_offset),
-            CfgStatement::InternalCall { line, callee_name, .. } => {
+            CfgStatement::InternalCall {
+                line, callee_name, ..
+            } => {
                 if let Some(name) = callee_name {
                     write!(f, "InternalCall({}, line {})", name, line)
                 } else {
@@ -340,11 +344,7 @@ impl ControlFlowGraph {
     /// bodies, ERROR nodes, inline assembly, or try/catch blocks.
     ///
     /// Called lazily from [`crate::detector_trait::AnalysisContext::cfg_for`].
-    pub fn build_for_function(
-        _tree: &Tree,
-        source: &str,
-        func: &Node,
-    ) -> Option<ControlFlowGraph> {
+    pub fn build_for_function(_tree: &Tree, source: &str, func: &Node) -> Option<ControlFlowGraph> {
         if func.has_error() || func.kind() != "function_definition" {
             return None;
         }
@@ -446,8 +446,7 @@ fn body_of_for_while<'a>(node: Node<'a>) -> Option<Node<'a>> {
     node.child_by_field_name("body").or_else(|| {
         named_children_of(node)
             .into_iter()
-            .filter(|n| is_statement_kind(n.kind()))
-            .last()
+            .rfind(|n| is_statement_kind(n.kind()))
     })
 }
 
@@ -463,10 +462,7 @@ fn body_of_do_while<'a>(node: Node<'a>) -> Option<Node<'a>> {
 /// Unwrap the tree-sitter-solidity `statement` wrapper to reveal the actual statement kind.
 fn unwrap_statement_node(node: Node) -> Node {
     if node.kind() == "statement" {
-        if let Some(inner) = named_children_of(node)
-            .into_iter()
-            .find(|n| !n.is_extra())
-        {
+        if let Some(inner) = named_children_of(node).into_iter().find(|n| !n.is_extra()) {
             return inner;
         }
     }
@@ -548,18 +544,22 @@ fn build_call_meta(call: &Node, source: &str) -> CallMeta {
             };
             (kind, Some(object.to_string()))
         }
-        Some(CallTarget::FreeFunction { name }) => {
-            (CallKind::LowLevelCall, Some(name.to_string()))
-        }
+        Some(CallTarget::FreeFunction { name }) => (CallKind::LowLevelCall, Some(name.to_string())),
         None => (CallKind::LowLevelCall, None),
     };
     let value_sent = call_text.contains("{value:");
-    CallMeta { call_kind, target_expr, value_sent }
+    CallMeta {
+        call_kind,
+        target_expr,
+        value_sent,
+    }
 }
 
 /// Extract storage slot expression from the LHS of an assignment.
 fn build_slot_expr(assign: &Node, source: &str) -> Option<StorageSlotExpr> {
-    let lhs = assign.child_by_field_name("left").or_else(|| assign.child(0))?;
+    let lhs = assign
+        .child_by_field_name("left")
+        .or_else(|| assign.child(0))?;
     let slot_expr = node_text(&lhs, source).to_string();
     let is_mapping = slot_expr.contains('[');
     let key_expr = if is_mapping {
@@ -571,7 +571,11 @@ fn build_slot_expr(assign: &Node, source: &str) -> Option<StorageSlotExpr> {
     } else {
         None
     };
-    Some(StorageSlotExpr { slot_expr, is_mapping, key_expr })
+    Some(StorageSlotExpr {
+        slot_expr,
+        is_mapping,
+        key_expr,
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -653,10 +657,9 @@ impl<'s> Builder<'s> {
     /// A block is "terminated" when its last statement is Return or Revert.
     fn is_terminated(&self, id: BasicBlockId) -> bool {
         self.idx(id).is_some_and(|i| {
-            self.blocks[i]
-                .statements
-                .last()
-                .is_some_and(|s| matches!(s, CfgStatement::Return { .. } | CfgStatement::Revert { .. }))
+            self.blocks[i].statements.last().is_some_and(|s| {
+                matches!(s, CfgStatement::Return { .. } | CfgStatement::Revert { .. })
+            })
         })
     }
 
@@ -706,20 +709,36 @@ impl<'s> Builder<'s> {
             "do_while_statement" => self.process_do_while(current, exit, node),
 
             "return_statement" => {
-                self.push(current, CfgStatement::Return { byte_offset: node.start_byte() });
+                self.push(
+                    current,
+                    CfgStatement::Return {
+                        byte_offset: node.start_byte(),
+                    },
+                );
                 self.connect(current, exit);
                 current
             }
 
             "revert_statement" | "throw_statement" => {
-                self.push(current, CfgStatement::Revert { byte_offset: node.start_byte() });
+                self.push(
+                    current,
+                    CfgStatement::Revert {
+                        byte_offset: node.start_byte(),
+                    },
+                );
                 self.connect(current, exit);
                 current
             }
 
             "emit_statement" => {
                 let line = node.start_position().row + 1;
-                self.push(current, CfgStatement::Emit { byte_offset: node.start_byte(), line });
+                self.push(
+                    current,
+                    CfgStatement::Emit {
+                        byte_offset: node.start_byte(),
+                        line,
+                    },
+                );
                 current
             }
 
@@ -749,12 +768,22 @@ impl<'s> Builder<'s> {
             // back-edges from the loop-body end; break would ideally go to `after` but
             // the over-approximation is sound for taint).
             "break_statement" | "continue_statement" => {
-                self.push(current, CfgStatement::Other { byte_offset: node.start_byte() });
+                self.push(
+                    current,
+                    CfgStatement::Other {
+                        byte_offset: node.start_byte(),
+                    },
+                );
                 current
             }
 
             _ => {
-                self.push(current, CfgStatement::Other { byte_offset: node.start_byte() });
+                self.push(
+                    current,
+                    CfgStatement::Other {
+                        byte_offset: node.start_byte(),
+                    },
+                );
                 current
             }
         }
@@ -951,14 +980,18 @@ impl<'s> Builder<'s> {
                     None
                 }
             });
-            return CfgStatement::InternalCall { byte_offset, line, callee_name };
+            return CfgStatement::InternalCall {
+                byte_offset,
+                line,
+                callee_name,
+            };
         }
 
         // Priority 5: assignment expressions.
         let assignments = find_nodes_of_kind(node, "assignment_expression");
         let augmented = find_nodes_of_kind(node, "augmented_assignment_expression");
 
-        for assign in assignments.iter().chain(augmented.iter()) {
+        if let Some(assign) = assignments.iter().chain(augmented.iter()).next() {
             return if is_state_write(assign) {
                 let slot = build_slot_expr(assign, self.source);
                 CfgStatement::StateWrite {
@@ -1107,7 +1140,11 @@ mod tests {
             let cfg = cfg.expect("empty body should produce a minimal entry→exit CFG");
             assert!(cfg.block(cfg.entry).is_some());
             assert!(cfg.block(cfg.exit).is_some());
-            assert!(cfg.block(cfg.entry).unwrap().statements.is_empty());
+            assert!(cfg
+                .block(cfg.entry)
+                .expect("entry block exists")
+                .statements
+                .is_empty());
         }
 
         #[test]
@@ -1133,9 +1170,16 @@ mod tests {
             // Entry block should contain the Guard statement.
             let entry_block = cfg.block(cfg.entry).expect("entry block exists");
             assert!(
-                entry_block.statements.iter().any(|s| matches!(s, CfgStatement::Guard { .. })),
+                entry_block
+                    .statements
+                    .iter()
+                    .any(|s| matches!(s, CfgStatement::Guard { .. })),
                 "expected a Guard statement in entry block, got: {:?}",
-                entry_block.statements.iter().map(|s| s.to_string()).collect::<Vec<_>>()
+                entry_block
+                    .statements
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
             );
         }
 
@@ -1177,7 +1221,10 @@ mod tests {
             let cfg = build_cfg_for_first_function(src);
             let cfg = cfg.expect("deeply nested branches should produce a CFG");
             // Should have multiple blocks (entry + many if-branches + merge blocks).
-            assert!(cfg.blocks.len() > 3, "expected multiple blocks for nested ifs");
+            assert!(
+                cfg.blocks.len() > 3,
+                "expected multiple blocks for nested ifs"
+            );
         }
 
         #[test]
@@ -1189,7 +1236,10 @@ mod tests {
                 }
             }"#;
             let cfg = build_cfg_for_first_function(src);
-            assert!(cfg.is_none(), "try/catch: conservative None (not yet handled)");
+            assert!(
+                cfg.is_none(),
+                "try/catch: conservative None (not yet handled)"
+            );
         }
 
         #[test]

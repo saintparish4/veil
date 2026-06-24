@@ -143,19 +143,22 @@ mod tests {
         // PUSH1 gas, SLOAD target_slot, [args…], DELEGATECALL
         let bytecode = [
             0x60, 0x00, // PUSH1 0x00 (gas)
-            0x54,       // SLOAD (load target from slot 0)
+            0x54, // SLOAD (load target from slot 0)
             0x60, 0x00, // PUSH1 0x00 (argsOffset)
             0x60, 0x00, // PUSH1 0x00 (argsLength)
             0x60, 0x00, // PUSH1 0x00 (retOffset)
             0x60, 0x00, // PUSH1 0x00 (retLength)
-            0xf4,       // DELEGATECALL
-            0x00,       // STOP
+            0xf4, // DELEGATECALL
+            0x00, // STOP
         ];
         let instrs = disassemble(&bytecode);
         let blocks = build_basic_blocks(&instrs);
         let cfg = EvmCfg::build(blocks);
         let findings = detect_delegatecall_from_storage(&cfg);
-        assert!(!findings.is_empty(), "SLOAD before DELEGATECALL should be flagged");
+        assert!(
+            !findings.is_empty(),
+            "SLOAD before DELEGATECALL should be flagged"
+        );
         assert_eq!(findings[0].detector_id, "evm-delegatecall-from-storage");
         assert_eq!(findings[0].severity, "Critical");
     }
@@ -180,11 +183,14 @@ mod tests {
     fn selfdestruct_without_guard_flagged() {
         let bytecode = [
             0x60, 0x00, // PUSH1 0x00
-            0xff,       // SELFDESTRUCT
+            0xff, // SELFDESTRUCT
         ];
         let instrs = disassemble(&bytecode);
         let findings = detect_unprotected_selfdestruct(&instrs);
-        assert!(!findings.is_empty(), "SELFDESTRUCT without guard should be flagged");
+        assert!(
+            !findings.is_empty(),
+            "SELFDESTRUCT without guard should be flagged"
+        );
         assert_eq!(findings[0].severity, "Critical");
     }
 
@@ -194,10 +200,10 @@ mod tests {
         let bytecode = [
             0x60, 0x05, // PUSH1 dest
             0x60, 0x01, // PUSH1 condition=1
-            0x57,       // JUMPI
-            0x5b,       // JUMPDEST
+            0x57, // JUMPI
+            0x5b, // JUMPDEST
             0x60, 0x00, // PUSH1 0x00
-            0xff,       // SELFDESTRUCT
+            0xff, // SELFDESTRUCT
         ];
         let instrs = disassemble(&bytecode);
         let findings = detect_unprotected_selfdestruct(&instrs);

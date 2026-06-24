@@ -107,8 +107,9 @@ impl Detector for FlashLoanDetector {
             // patterns and give better remediation advice.
             let is_known_fl_receiver = is_flash_loan_receiver(func, ctx.source);
             let is_known_uniswap_cb = is_uniswap_callback(func, ctx.source);
-            let is_generic_callback =
-                !is_known_fl_receiver && !is_known_uniswap_cb && (name.contains("Callback") || name.contains("callback"));
+            let is_generic_callback = !is_known_fl_receiver
+                && !is_known_uniswap_cb
+                && (name.contains("Callback") || name.contains("callback"));
 
             if is_known_fl_receiver || is_known_uniswap_cb || is_generic_callback {
                 // Protocol-specific caller validation patterns:

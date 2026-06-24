@@ -78,4 +78,6 @@ pub use veil::ast_utils::{
 };
 
 // Pattern rule engine (parse/eval custom TOML predicate expressions)
-pub use veil::rule_engine::{eval_predicate, parse_predicate, run_pattern_rules, PatternRule, Predicate};
+pub use veil::rule_engine::{
+    eval_predicate, parse_predicate, run_pattern_rules, PatternRule, Predicate,
+};
