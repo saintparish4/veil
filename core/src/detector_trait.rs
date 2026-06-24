@@ -11,6 +11,7 @@
 
 use crate::ast_utils::find_nodes_of_kind;
 use crate::cfg::ControlFlowGraph;
+use crate::defi_patterns::{classify_contract_role, ContractRole};
 use crate::types::{Confidence, Finding, Severity};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -35,6 +36,9 @@ pub struct AnalysisContext<'a> {
     pub file_path: Option<&'a str>,
     /// Pre-computed `function_definition` nodes for efficient iteration.
     pub functions: Vec<Node<'a>>,
+    /// Dominant protocol role of the contract(s) in this file, computed once in `::new`.
+    /// Detectors use this to adjust confidence or skip irrelevant checks.
+    pub contract_role: ContractRole,
     /// Lazy CFG cache keyed by function byte offset; only functions that request
     /// a CFG get one built and cached.
     cfgs: RefCell<HashMap<usize, ControlFlowGraph>>,
@@ -46,12 +50,15 @@ impl<'a> AnalysisContext<'a> {
     /// Pre-computes the list of `function_definition` nodes so detectors can
     /// iterate `ctx.functions` instead of traversing the full tree.
     pub fn new(tree: &'a Tree, source: &'a str) -> Self {
-        let functions = find_nodes_of_kind(&tree.root_node(), "function_definition");
+        let root = tree.root_node();
+        let functions = find_nodes_of_kind(&root, "function_definition");
+        let contract_role = classify_contract_role(&root, source);
         Self {
             tree,
             source,
             file_path: None,
             functions,
+            contract_role,
             cfgs: RefCell::new(HashMap::new()),
         }
     }

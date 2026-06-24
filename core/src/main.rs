@@ -2,7 +2,9 @@ use clap::{Parser, Subcommand};
 use colored::*;
 use std::path::Path;
 use veil::detectors::build_registry;
+use veil::diff::{diff_scans, load_scan_json};
 use veil::scan::{exit_code_for_stats, new_solidity_parser};
+use veil::suppression_rules::load_project_rules;
 use veil::*;
 
 #[derive(Parser)]
@@ -21,6 +23,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Scan a Solidity file or directory for vulnerabilities.
     Scan {
         path: String,
         #[arg(short, long, default_value = "terminal")]
@@ -29,17 +32,41 @@ enum Commands {
         recursive: bool,
         #[arg(long)]
         baseline: Option<String>,
-        /// Generate a report in the given format (html or pdf)
+        /// Generate a report in the given format (html or pdf).
         /// Output is written to stdout; redirect to a file:
-        /// veil scan contracts/ --recursive --report html > report.html
+        ///   veil scan contracts/ --recursive --report html > report.html
         #[arg(long, value_name = "FORMAT", value_parser = ["html", "pdf"])]
         report: Option<String>,
-        /// Path to a logo image (PNG, SVG, JPEG) for white-label reports
+        /// Path to a logo image (PNG, SVG, JPEG) for white-label reports.
         #[arg(long, value_name = "PATH")]
         logo: Option<String>,
-        /// Organization name displayed in the report header
+        /// Organization name displayed in the report header.
         #[arg(long = "org-name", value_name = "NAME")]
         org_name: Option<String>,
+        /// Suppress application of TOML rules from `.veil/rules/` (load them but skip).
+        #[arg(long)]
+        no_rules: bool,
+    },
+    /// Compare two JSON scan outputs and show new/fixed findings.
+    ///
+    /// Reads the JSON produced by `veil scan --format json` and diffs them by
+    /// finding identity (SHA-256 of file:line:detector_id).
+    ///
+    /// Exit codes:
+    ///   0 = no new findings (or all fixed)
+    ///   1 = new findings introduced
+    Diff {
+        /// Path to the baseline scan JSON (before).
+        before: String,
+        /// Path to the new scan JSON (after).
+        after: String,
+        /// Output format: `json` (default) or `terminal`.
+        #[arg(short, long, default_value = "json")]
+        format: String,
+        /// Exit 1 only when new findings at or above this risk threshold appear.
+        /// Risk = critical×100 + high×10 + medium×3 + low×1 per finding.
+        #[arg(long, value_name = "SCORE")]
+        min_risk: Option<i64>,
     },
 }
 
@@ -71,6 +98,7 @@ fn main() {
             report,
             logo,
             org_name,
+            no_rules,
         } => {
             let mut parser = match new_solidity_parser() {
                 Ok(p) => p,
@@ -82,8 +110,6 @@ fn main() {
 
             let registry = build_registry();
             let outcome = if Path::new(&path).is_dir() {
-                // I no longer pass `parser` here because scan_directory_with manages its own
-                // thread-local parsers internally for parallel execution
                 scan_directory_with(&path, recursive, &registry)
             } else {
                 scan_file_with(&path, &registry, &mut parser)
@@ -98,6 +124,15 @@ fn main() {
             if let Some(ref baseline_path) = baseline {
                 let baseline_set = load_baseline(baseline_path);
                 findings = filter_findings_by_baseline(findings, &baseline_set);
+            }
+
+            // Apply TOML suppression rules from `.veil/rules/` unless disabled.
+            if !no_rules {
+                let rules = load_project_rules(&path);
+                if !rules.is_empty() {
+                    tracing::debug!(count = rules.len(), "applying TOML suppression rules");
+                    findings = veil::suppression_rules::filter_findings_by_rules(findings, &rules);
+                }
             }
 
             let stats = calculate_statistics(&findings);
@@ -136,6 +171,87 @@ fn main() {
             }
 
             std::process::exit(exit_code_for_stats(&stats));
+        }
+
+        Commands::Diff {
+            before,
+            after,
+            format,
+            min_risk,
+        } => {
+            let before_findings = match load_scan_json(&before) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("{} {}", "Error:".red().bold(), e);
+                    std::process::exit(2);
+                }
+            };
+            let after_findings = match load_scan_json(&after) {
+                Ok(f) => f,
+                Err(e) => {
+                    eprintln!("{} {}", "Error:".red().bold(), e);
+                    std::process::exit(2);
+                }
+            };
+
+            let diff = diff_scans(&before_findings, &after_findings);
+
+            match format.as_str() {
+                "json" => {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&diff).unwrap_or_default()
+                    );
+                }
+                _ => {
+                    let new_n = diff.new_findings.len();
+                    let fixed_n = diff.fixed_findings.len();
+                    let delta = diff.risk_delta.delta;
+                    println!(
+                        "\n{}\n",
+                        "Veil Audit Diff".bold().underline()
+                    );
+                    println!(
+                        "  {} new findings    {} fixed findings",
+                        new_n.to_string().red().bold(),
+                        fixed_n.to_string().green().bold()
+                    );
+                    println!(
+                        "  Risk score: {} → {} (Δ{}) — {}",
+                        diff.risk_delta.before,
+                        diff.risk_delta.after,
+                        delta,
+                        diff.risk_delta.assessment.bold()
+                    );
+                    if !diff.new_findings.is_empty() {
+                        println!("\n{}", "New findings:".bold());
+                        for f in &diff.new_findings {
+                            println!(
+                                "  [{:?}] {} — {} (line {}{})",
+                                f.severity,
+                                f.detector_id,
+                                f.vulnerability_type,
+                                f.line,
+                                f.file
+                                    .as_deref()
+                                    .map(|p| format!(" in {}", p))
+                                    .unwrap_or_default()
+                            );
+                        }
+                    }
+                }
+            }
+
+            // Exit 1 if any new findings are present (or above min_risk threshold)
+            let new_risk: i64 = diff
+                .new_findings
+                .iter()
+                .map(|f| veil::diff::risk_score(std::slice::from_ref(f)))
+                .sum();
+            let threshold = min_risk.unwrap_or(1);
+            if new_risk >= threshold {
+                std::process::exit(1);
+            }
         }
     }
 }
