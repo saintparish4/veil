@@ -1,55 +1,82 @@
-# Veil — benchmarking & reproducibility entry points.
+# Veil developer, benchmark, and reproducibility entry points.
 #
-# Human-facing targets delegate to `cargo xtask <subcommand>` so all the
-# logic is type-checked Rust that works identically on Linux / macOS /
-# Windows. Every headline number in README.md is regenerable by exactly
-# one of the targets below.
+# These targets cover local development and reproducible benchmark runs.
+# Benchmark targets delegate to `cargo xtask <subcommand>` so the orchestration
+# stays type-checked and works consistently on Linux, macOS, and Windows.
 
-.PHONY: default bench fetch bench-perf bench-precision bench-recall \
-        bench-exploits bench-standards coverage
+.PHONY: default fmt fmt-check clippy check build build-release test ci \
+        bench fetch bench-perf bench-precision bench-recall bench-exploits \
+        bench-standards coverage
 
-# Default target: print the available targets.
+# Print the available targets by default.
 default:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  %-18s %s\n", $$1, $$2}'
 
 # ---------------------------------------------------------------------------
-# Reproducibility pipeline (Phase 8 wires this up end-to-end).
+# Development.
 # ---------------------------------------------------------------------------
 
-# Run the full suite in dependency order. Used by the nightly CI workflow.
+fmt: ## Format the workspace
+	cargo fmt --all
+
+fmt-check: ## Check formatting without changing files
+	cargo fmt --all --check
+
+clippy: ## Lint the workspace with warnings denied
+	cargo clippy --workspace --all-targets -- -D warnings
+
+check: ## Type-check the workspace without codegen
+	cargo check --workspace --all-targets
+
+build: ## Build the workspace in debug mode
+	cargo build --workspace
+
+build-release: ## Build the workspace in release mode
+	cargo build --workspace --release
+
+test: ## Run workspace tests
+	cargo test --workspace
+
+ci: fmt-check clippy test ## Run local CI checks
+
+# ---------------------------------------------------------------------------
+# Reproducibility pipeline.
+# ---------------------------------------------------------------------------
+
+# Run the full suite in dependency order.
 bench: bench-standards bench-perf bench-precision bench-recall bench-exploits coverage ## Run the full benchmark suite
 
-# Populate `benchmarks/vendor/` from pinned SHAs (Phase 3).
-fetch: ## Populate benchmarks/vendor/ from pinned SHAs
+# Populate `benchmarks/vendor/` from pinned SHAs.
+fetch: ## Populate the benchmark vendor tree
 	cargo xtask fetch --corpus all
 
 # ---------------------------------------------------------------------------
 # Individual suites.
 # ---------------------------------------------------------------------------
 
-# Criterion perf benches + p50/p95/p99 summary (Phase 2).
-bench-perf: ## Criterion perf benches + p50/p95/p99 summary
+# Run Criterion performance benches and summarize latency percentiles.
+bench-perf: ## Run Criterion performance benches
 	cargo xtask perf
 
-# Precision on the pinned production-DeFi corpus (Phase 3).
+# Measure precision on the pinned production-DeFi corpus.
 # `cargo xtask precision` auto-hydrates the vendor tree if it is empty
 # (see `--no-auto-fetch` to opt out) so this target stays shell-agnostic.
-bench-precision: ## Precision on the pinned production-DeFi corpus
+bench-precision: ## Measure precision on the corpus
 	cargo xtask precision
 
-# Recall against SWC + SmartBugs labels (Phase 4).
-bench-recall: ## Recall against SWC + SmartBugs labels
+# Measure recall against SWC and SmartBugs labels.
+bench-recall: ## Measure recall against labels
 	cargo xtask recall
 
-# Historical-exploit reconstructions (Phase 5).
-bench-exploits: ## Historical-exploit reconstructions
+# Run historical exploit reconstructions.
+bench-exploits: ## Run historical exploit checks
 	cargo xtask exploits
 
-# OWASP / SWC / SARIF conformance (Phase 7).
-bench-standards: ## OWASP / SWC / SARIF conformance
+# Verify OWASP, SWC, and SARIF conformance.
+bench-standards: ## Verify standards conformance
 	cargo xtask standards
 
-# Line coverage via cargo-llvm-cov (Phase 6).
-coverage: ## Line coverage via cargo-llvm-cov
+# Generate line coverage with cargo-llvm-cov.
+coverage: ## Generate line coverage report
 	cargo llvm-cov --workspace --html --output-dir benchmarks/perf/results/coverage
