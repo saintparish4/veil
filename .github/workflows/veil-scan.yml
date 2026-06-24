@@ -4,7 +4,7 @@ name: Veil Security Scan
 #
 #   jobs:
 #     security:
-#       uses: saintparish4/veil/.github/workflows/veil-scan.yml@main
+#       uses: saintparish4/veil/.github/workflows/veil-scan.yml@alpha
 #       with:
 #         path: contracts/
 #         fail-on-new-only: true
