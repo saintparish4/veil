@@ -21,13 +21,18 @@ Veil is built differently:
 
 ## Features
 
-- 13 vulnerability detectors covering the OWASP Smart Contract Top 10
+- 13 source-level vulnerability detectors covering the OWASP Smart Contract Top 10
 - Control flow graph (CFG) with taint propagation for reentrancy analysis
+- Inter-procedural function summaries (intra-file storage-write and external-call propagation)
+- EVM bytecode frontend (`veil evm`) — disassembly, EVM CFG, and source-map correlation for bugs invisible at the AST level
+- Custom TOML rules in `.veil/rules/` — both pattern detectors and team-specific suppressions
+- Plugin API (`veil-plugin`) for authoring custom detectors as Rust workspace members
+- Audit diff mode (`veil diff`) — compare two scans for new vs. fixed findings with a risk delta
 - SARIF 2.1.0 output compatible with GitHub Code Scanning
 - JSON output for pipeline integration
 - HTML and PDF security reports with custom branding
-- Inline suppression comments (`// veil-ignore:`)
-- Baseline files to silence known findings in CI
+- Inline suppression comments (`// veil-ignore:`) and baseline files for CI
+- Reusable GitHub Action (`veil-scan.yml`) for one-line CI gating
 - Exit codes designed for CI gating (0 = clean, 1 = medium/low, 2 = high, 3 = critical)
 - Recursive directory scanning
 
@@ -38,7 +43,7 @@ Veil is built differently:
 Veil scans each Solidity fixture in a **median of ~4.0 ms** (p99 **< 10 ms**) across the 18 real contracts in the perf set (~126 KB Solidity), computed from [`benchmarks/perf/results/summary.json`](benchmarks/perf/results/summary.json). Reproduce:
 
 ```bash
-just bench-perf
+make bench-perf
 ```
 
 Numbers come from Criterion's `scan_file/*` group driven through `veil::scan::scan_file_with` — the same entry point the `veil` binary uses. Three synthetic fixtures (`synth-small`/`medium`/`large`, up to 80 KB) are excluded from the headline p99 since `synth-large` is deliberately oversized for scaling studies; see [`benchmarks/perf/README.md`](benchmarks/perf/README.md) for the full per-fixture breakdown.
@@ -70,11 +75,11 @@ Resolved SHAs are recorded per-corpus at `benchmarks/vendor/precision/<name>/.ve
 Reproduce:
 
 ```bash
-just bench-precision
+make bench-precision
 cat benchmarks/precision/results/summary.md
 ```
 
-The `just bench-precision` recipe auto-fetches the corpus on first run (shallow clones pinned to the resolved SHA) and is idempotent thereafter. `benchmarks/vendor/` stays gitignored; CI re-fetches each nightly run.
+The `make bench-precision` recipe auto-fetches the corpus on first run (shallow clones pinned to the resolved SHA) and is idempotent thereafter. `benchmarks/vendor/` stays gitignored; CI re-fetches each nightly run.
 
 ---
 
@@ -102,7 +107,7 @@ Veil flags the root-cause vulnerability in **12 of 14 reconstructed historical h
 Reproduce:
 
 ```bash
-just bench-exploits
+make bench-exploits
 cat benchmarks/exploits/results/summary.md
 ```
 
@@ -170,6 +175,13 @@ veil scan contracts/ --recursive --format sarif > results.sarif
 
 # Generate an HTML security report
 veil scan contracts/ --recursive --report html > report.html
+
+# Analyse compiled EVM bytecode (bugs invisible at the AST level)
+veil evm MyContract.bin --sourcemap MyContract.json --source contracts/MyContract.sol
+
+# Diff two scans to gate CI on newly introduced findings
+veil scan contracts/ -r --format json > after.json
+veil diff before.json after.json
 ```
 
 ---
@@ -189,7 +201,30 @@ Scan a `.sol` file or directory.
 | `--report <FORMAT>` | Generate a report: `html` or `pdf` (written to stdout) |
 | `--logo <PATH>` | Logo image path for reports |
 | `--org-name <NAME>` | Organization name for report header |
+| `--no-rules` | Skip applying TOML rules from `.veil/rules/` |
 | `-v, --verbose` | Enable debug logging to stderr |
+
+### `veil evm <bytecode>`
+
+Analyse compiled EVM bytecode for vulnerabilities that are invisible at the Solidity AST level (e.g. `DELEGATECALL` to a storage-loaded target, unprotected `SELFDESTRUCT`). Accepts a raw hex string (with or without `0x`) or a path to a `.bin`/hex file.
+
+| Flag | Description |
+|------|-------------|
+| `<bytecode>` | Hex string (`0x…`) or path to a binary/hex file |
+| `--sourcemap <FILE>` | solc source-map JSON for source correlation |
+| `--source <FILE>` | Solidity source file for line-number resolution |
+| `-f, --format <FORMAT>` | Output format: `terminal` (default) or `json` |
+
+### `veil diff <before> <after>`
+
+Compare two `veil scan --format json` outputs and report new vs. fixed findings. Findings are matched by identity (SHA-256 of `file:line:detector_id`). Exits `1` when new findings are introduced (subject to `--min-risk`), making it suitable for pull-request gating.
+
+| Flag | Description |
+|------|-------------|
+| `<before>` | Baseline scan JSON |
+| `<after>` | New scan JSON |
+| `-f, --format <FORMAT>` | Output format: `json` (default) or `terminal` |
+| `--min-risk <SCORE>` | Exit `1` only when new findings reach this risk score (`critical×100 + high×10 + medium×3 + low×1`) |
 
 ### Exit Codes
 
@@ -202,11 +237,26 @@ Designed for CI gating:
 | `2` | At least one high severity finding |
 | `3` | At least one critical severity finding |
 
+The repository also ships a reusable workflow that installs Veil, scans, gates on severity (or new-findings-only against a baseline), and uploads SARIF to Code Scanning:
+
 ```yaml
-# GitHub Actions example
+# .github/workflows/security.yml in your project
+jobs:
+  security:
+    uses: saintparish4/veil/.github/workflows/veil-scan.yml@alpha
+    with:
+      path: contracts/
+      severity-threshold: High
+      fail-on-new-only: true
+      baseline-path: .veil/baseline.json
+```
+
+Or wire the steps manually:
+
+```yaml
 - name: Scan contracts
   run: veil scan contracts/ --recursive --format sarif > results.sarif
-  
+
 - name: Upload to Code Scanning
   uses: github/codeql-action/upload-sarif@v3
   with:
@@ -295,6 +345,17 @@ Veil ships 13 detectors mapped to the OWASP Smart Contract Top 10 (2025).
 | `dos-loops` | Medium / High | External calls inside loops, unbounded iteration over dynamic arrays, growing-array patterns, expensive per-iteration operations |
 | `unchecked-erc20` | High | `transfer`, `transferFrom`, and `approve` return values not checked (targets non-reverting ERC20s like USDT) |
 
+### EVM bytecode detectors
+
+`veil evm` runs a separate set of detectors over disassembled bytecode and the EVM CFG, catching issues that never appear in source — including compiler-introduced or proxy-deployed code:
+
+| ID | Severity | What It Detects |
+|----|----------|-----------------|
+| `delegatecall-from-storage` | Critical | `DELEGATECALL` whose target address is loaded from storage (upgradeable-proxy hijack surface) |
+| `unprotected-selfdestruct` | High | `SELFDESTRUCT` reachable without any preceding conditional guard |
+
+With `--sourcemap`/`--source`, findings are correlated back to Solidity line numbers.
+
 ### What Veil Does Not Flag
 
 Veil is tuned not to produce findings on these correct patterns:
@@ -345,41 +406,109 @@ veil scan contracts/ --recursive --baseline baseline.json
 
 Baseline matching is normalized: finding `(file, line, vulnerability_type)` tuples are compared case-insensitively with hyphens and underscores treated as equivalent.
 
+For pull-request gating, prefer `veil diff`, which compares two JSON scans by finding identity and can fail only when *new* findings cross a risk threshold:
+
+```bash
+veil scan contracts/ -r --format json > before.json   # on the base branch
+veil scan contracts/ -r --format json > after.json    # on the PR branch
+veil diff before.json after.json --min-risk 10        # exit 1 only on new High+ findings
+```
+
+---
+
+## Custom Rules
+
+Teams can add project-specific rules as TOML files under `.veil/rules/*.toml`. They are loaded automatically on every scan (disable with `--no-rules`) and applied after inline `// veil-ignore:` and baseline filtering. Two rule kinds are supported.
+
+**Suppression rules** silence a known detector for a recognised pattern:
+
+```toml
+# .veil/rules/defi.toml
+[[rules]]
+detector = "reentrancy"
+if_function_name_contains = "Callback"
+reason = "Uniswap/Aave callbacks are invoked by verified pool contracts"
+```
+
+**Pattern rules** are custom detectors written as a predicate over each function:
+
+```toml
+[[rules]]
+type = "pattern"
+id = "custom-timelock"
+severity = "High"
+pattern = "function_name_contains('schedule') AND NOT has_modifier('onlyProposer')"
+message = "Timelock schedule without proposer access control"
+```
+
+The predicate grammar supports `AND` / `OR` / `NOT`, parentheses, and the predicates `function_name_contains('…')`, `has_modifier('…')`, `body_contains('…')`, `is_external`, and `is_public`.
+
+---
+
+## Custom Detectors (Plugin API)
+
+For logic beyond what TOML predicates express, author a detector in Rust against the `veil-plugin` crate and add it as a workspace member:
+
+```toml
+# Your project's Cargo.toml
+[workspace.dependencies]
+veil-plugin = { git = "https://github.com/saintparish4/veil" }
+```
+
+```rust
+use veil_plugin::{AnalysisContext, Confidence, Detector, Finding, Severity};
+
+pub struct MyDetector;
+
+impl Detector for MyDetector {
+    fn id(&self) -> &'static str { "my-custom-check" }
+    fn name(&self) -> &'static str { "My Custom Check" }
+    fn severity(&self) -> Severity { Severity::High }
+    fn owasp_category(&self) -> Option<&'static str> { None }
+
+    fn run(&self, ctx: &AnalysisContext<'_>, findings: &mut Vec<Finding>) {
+        // walk ctx.functions / ctx.tree and push Finding values
+    }
+}
+```
+
+Detectors receive the same read-only `AnalysisContext` as the built-in detectors (parsed AST, source, function nodes, lazy CFG).
+
 ---
 
 ## Architecture
 
+Veil is a Cargo workspace of four crates:
+
 ```
 veil/
-├── Cargo.toml
-└── core/
-    └── src/
-        ├── main.rs              # CLI (clap), integration tests
-        ├── lib.rs               # Public API surface
-        ├── scan.rs              # Orchestration: parse → analyze → suppress → report
-        ├── detector_trait.rs    # Detector trait, AnalysisContext, DetectorRegistry
-        ├── ast_utils.rs         # Tree-sitter node helpers
-        ├── cfg.rs               # Control flow graph builder
-        ├── taint.rs             # Taint propagation over CFG
-        ├── types.rs             # Finding, Severity, Confidence
-        ├── output.rs            # Terminal, JSON, SARIF formatters
-        ├── report.rs            # HTML/PDF report generation
-        ├── suppression.rs       # Inline ignore parsing, baseline filtering
-        └── detectors/
-            ├── mod.rs           # Registry (build_registry)
-            ├── reentrancy.rs
-            ├── unchecked_calls.rs
-            ├── tx_origin.rs
-            ├── access_control.rs
-            ├── delegatecall.rs
-            ├── timestamp.rs
-            ├── unsafe_random.rs
-            ├── integer_overflow.rs
-            ├── flash_loan.rs
-            ├── storage_collision.rs
-            ├── front_running.rs
-            ├── dos_loops.rs
-            └── unchecked_erc20.rs
+├── Cargo.toml               # Workspace: core, veil-evm, veil-plugin, xtask
+├── core/                    # The `veil` library + CLI binary
+│   └── src/
+│       ├── main.rs              # CLI (clap): scan / evm / diff subcommands
+│       ├── lib.rs               # Public API surface
+│       ├── scan.rs              # Orchestration: parse → analyze → suppress → report
+│       ├── detector_trait.rs    # Detector trait, AnalysisContext, DetectorRegistry
+│       ├── ast_utils.rs         # Tree-sitter node helpers
+│       ├── cfg.rs               # Control flow graph builder
+│       ├── taint.rs             # Taint propagation over CFG
+│       ├── interprocedural.rs   # Per-function summaries (intra-file may-analysis)
+│       ├── defi_patterns.rs     # DeFi self-service / safe-pattern recognition
+│       ├── storage_model.rs     # Proxy storage-layout modeling
+│       ├── rule_engine.rs       # TOML pattern-rule predicate engine
+│       ├── suppression_rules.rs # .veil/rules/ loading (suppression + pattern)
+│       ├── suppression.rs       # Inline ignore parsing, baseline filtering
+│       ├── diff.rs              # `veil diff` scan comparison + risk delta
+│       ├── types.rs             # Finding, Severity, Confidence
+│       ├── output.rs            # Terminal, JSON, SARIF formatters
+│       ├── report.rs            # HTML/PDF report generation
+│       └── detectors/           # 13 source-level detectors + build_registry
+│           ├── mod.rs
+│           ├── reentrancy.rs
+│           └── … (12 more)
+├── veil-evm/                # EVM bytecode frontend: disasm, EVM CFG, source maps
+├── veil-plugin/             # Public API for authoring custom detectors
+└── xtask/                   # Benchmark / repo automation runner
 ```
 
 Each detector is a zero-sized struct implementing the `Detector` trait. Detectors receive a read-only `AnalysisContext` containing the parsed tree-sitter AST, raw source, pre-computed function nodes, and a lazy CFG cache. They append `Finding` values without side effects.
