@@ -5,9 +5,7 @@ use colored::*;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "codegen", derive(ts_rs::TS))]
-pub enum Severity {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]pub enum Severity {
     Critical,
     High,
     Medium,
@@ -35,9 +33,7 @@ impl Severity {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "codegen", derive(ts_rs::TS))]
-pub enum Confidence {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]pub enum Confidence {
     High,
     Medium,
     Low,
@@ -85,9 +81,7 @@ impl Visibility {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[cfg_attr(feature = "codegen", derive(ts_rs::TS))]
-pub struct Finding {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]pub struct Finding {
     pub id: String,
     pub detector_id: String,
     pub severity: Severity,
@@ -125,9 +119,7 @@ impl Finding {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "codegen", derive(ts_rs::TS))]
-pub struct Statistics {
+#[derive(Debug, Default, Serialize, Deserialize)]pub struct Statistics {
     pub critical: u32,
     pub high: u32,
     pub medium: u32,
@@ -137,25 +129,19 @@ pub struct Statistics {
     pub confidence_low: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "codegen", derive(ts_rs::TS))]
-pub struct ScanError {
+#[derive(Debug, Clone, Serialize, Deserialize)]pub struct ScanError {
     pub file: String,
     pub kind: ScanErrorKind,
     pub message: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(feature = "codegen", derive(ts_rs::TS))]
-pub enum ScanErrorKind {
+#[derive(Debug, Clone, Serialize, Deserialize)]pub enum ScanErrorKind {
     FileReadError,
     ParseError,
 }
 
 #[must_use]
-#[derive(Debug, Default, Serialize, Deserialize)]
-#[cfg_attr(feature = "codegen", derive(ts_rs::TS))]
-pub struct ScanOutcome {
+#[derive(Debug, Default, Serialize, Deserialize)]pub struct ScanOutcome {
     pub findings: Vec<Finding>,
     #[serde(default)]
     pub statistics: Statistics,

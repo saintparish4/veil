@@ -1,10 +1,14 @@
 # Veil — line-ending policy.
 #
+# Normalize ALL text files to LF in the repo and on checkout, regardless of a
+# contributor's platform or core.autocrlf setting. Without this, editing on
+# Windows/WSL rewrites every file's line endings and turns each diff into
+# repo-wide CRLF churn. `text=auto` lets git detect binary files automatically.
+* text=auto eol=lf
+
 # Shell scripts MUST be LF-only so `bash` (including WSL bash invoked from
 # Windows) does not choke on carriage returns in constructs like
-# `set -euo pipefail\r`. This applies on checkout regardless of the
-# contributor's core.autocrlf setting.
-
+# `set -euo pipefail\r`. (Redundant with the rule above, but explicit.)
 *.sh         text eol=lf
 *.bash       text eol=lf
 
