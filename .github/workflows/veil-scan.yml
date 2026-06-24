@@ -59,7 +59,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # ── Install veil ───────────────────────────────────────────────────────
 
@@ -77,10 +77,7 @@ jobs:
 
       - name: Build veil from source (no version pinned)
         if: inputs.veil-version == ''
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cargo build (source install)
         if: inputs.veil-version == ''
