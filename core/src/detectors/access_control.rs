@@ -214,46 +214,52 @@ impl Detector for AccessControlDetector {
 
             // --- Check 1: Sensitive operation without access control ---
             //
-            // CFG path: all paths from entry to StateWrite/InternalCallSensitive must pass a Guard.
-            let used_cfg_for_check1 = if let Some(cfg_ref) = ctx.cfg_for(func) {
-                let query = TaintQuery {
-                    sources: vec![CfgStatementKind::EntryBlock],
-                    sinks: vec![
-                        CfgStatementKind::StateWrite,
-                        CfgStatementKind::InternalCallSensitive,
-                    ],
-                    sanitizers: vec![CfgStatementKind::Guard],
-                };
-                for v in find_taint_violations(&cfg_ref, &query) {
-                    if should_skip_access_control_warning(name, func_text) {
-                        continue;
-                    }
-                    let line = if v.sink_line > 0 {
-                        v.sink_line
-                    } else {
-                        v.source_line
+            // Modifier-based guards (onlyOwner, etc.) are not inlined into the CFG, so we
+            // check has_access_control first and skip both CFG and AST paths when a guard exists.
+            let has_ac = has_access_control(func, ctx.source);
+
+            let used_cfg_for_check1 = if !has_ac {
+                if let Some(cfg_ref) = ctx.cfg_for(func) {
+                    // Only InternalCallSensitive as sink: StateWrite alone doesn't indicate a
+                    // missing access control vulnerability — it would flag every setter function.
+                    let query = TaintQuery {
+                        sources: vec![CfgStatementKind::EntryBlock],
+                        sinks: vec![CfgStatementKind::InternalCallSensitive],
+                        sanitizers: vec![CfgStatementKind::Guard],
                     };
-                    findings.push(Finding::from_detector(
-                        self,
-                        line,
-                        Confidence::High,
-                        "Missing Access Control",
-                        format!(
-                            "Function '{}' has path to sensitive operation without access control",
-                            name
-                        ),
-                        "Add onlyOwner, onlyAdmin, or require(msg.sender == ...) guard",
-                    ));
+                    for v in find_taint_violations(&cfg_ref, &query) {
+                        if should_skip_access_control_warning(name, func_text) {
+                            continue;
+                        }
+                        let line = if v.sink_line > 0 {
+                            v.sink_line
+                        } else {
+                            v.source_line
+                        };
+                        findings.push(Finding::from_detector(
+                            self,
+                            line,
+                            Confidence::High,
+                            "Missing Access Control",
+                            format!(
+                                "Function '{}' has path to sensitive operation without access control",
+                                name
+                            ),
+                            "Add onlyOwner, onlyAdmin, or require(msg.sender == ...) guard",
+                        ));
+                    }
+                    true
+                } else {
+                    false
                 }
-                true
             } else {
-                false
+                true // has_access_control → skip AST fallback too
             };
 
             // AST fallback for Check 1 when CFG is not available.
             if !used_cfg_for_check1
                 && has_sensitive_operation(&body, ctx.source)
-                && !has_access_control(func, ctx.source)
+                && !has_ac
             {
                 if should_skip_access_control_warning(name, func_text) {
                     continue;

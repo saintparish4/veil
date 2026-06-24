@@ -38,11 +38,14 @@ impl Detector for ReentrancyDetector {
             let visibility = function_visibility(func, ctx.source);
 
             // Prefer CFG taint when available (handles branches, early returns, modifier bodies).
+            // No Guard sanitizer: a require(ok) after an external call checks return value but
+            // does NOT prevent reentrancy — the reentrant call happens *during* the external call,
+            // before any post-call guard executes. Only CEI ordering is a real sanitizer here.
             if let Some(cfg_ref) = ctx.cfg_for(func) {
                 let query = TaintQuery {
                     sources: vec![CfgStatementKind::ExternalCall],
                     sinks: vec![CfgStatementKind::StateWrite],
-                    sanitizers: vec![CfgStatementKind::Guard],
+                    sanitizers: vec![],
                 };
                 for v in find_taint_violations(&cfg_ref, &query) {
                     let adjusted = visibility_adjusted_confidence(Confidence::High, visibility);

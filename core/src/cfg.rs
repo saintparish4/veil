@@ -1,3 +1,5 @@
+use crate::ast_utils::{find_nodes_of_kind, func_body, get_call_target, is_external_call,
+    is_state_write, node_text, CallTarget};
 use smallvec::SmallVec;
 use std::collections::HashSet;
 use std::collections::VecDeque;
@@ -262,16 +264,608 @@ impl ControlFlowGraph {
     }
 
     /// Build a CFG for a single function node. Returns `None` for abstract/interface
-    /// bodies, ERROR nodes, or when the full builder is not yet implemented.
+    /// bodies, ERROR nodes, inline assembly, or try/catch blocks.
     ///
     /// Called lazily from [`crate::detector_trait::AnalysisContext::cfg_for`].
     pub fn build_for_function(
         _tree: &Tree,
-        _source: &str,
-        _func: &Node,
+        source: &str,
+        func: &Node,
     ) -> Option<ControlFlowGraph> {
-        // TODO: full AST-based CFG construction (branches, loops, modifier inlining).
-        None
+        if func.has_error() || func.kind() != "function_definition" {
+            return None;
+        }
+
+        let body = func_body(func)?;
+
+        // Conservative: inline assembly has control flow we can't express in our IR.
+        if !find_nodes_of_kind(&body, "assembly_statement").is_empty() {
+            return None;
+        }
+
+        // Conservative: try/catch requires exception-edge modelling we don't have yet.
+        if !find_nodes_of_kind(&body, "try_statement").is_empty() {
+            return None;
+        }
+
+        let mut b = Builder::new(source);
+        let entry = b.entry;
+        let exit = b.exit;
+
+        let stmts = stmt_children_of(body);
+        let last = b.process_stmts(entry, exit, &stmts);
+
+        if !b.is_terminated(last) && last != exit {
+            b.connect(last, exit);
+        }
+
+        Some(ControlFlowGraph {
+            entry,
+            exit,
+            blocks: b.blocks,
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CFG builder helpers (module-level)
+// ---------------------------------------------------------------------------
+
+fn is_statement_kind(kind: &str) -> bool {
+    matches!(
+        kind,
+        // tree-sitter-solidity 1.x wraps every statement in a generic "statement" node
+        "statement"
+            | "block"
+            | "statement_block"
+            | "function_body"
+            | "block_statement"
+            | "expression_statement"
+            | "if_statement"
+            | "for_statement"
+            | "while_statement"
+            | "do_while_statement"
+            | "return_statement"
+            | "revert_statement"
+            | "emit_statement"
+            | "try_statement"
+            | "assembly_statement"
+            | "variable_declaration_statement"
+            | "break_statement"
+            | "continue_statement"
+            | "throw_statement"
+    )
+}
+
+fn named_children_of<'a>(node: Node<'a>) -> Vec<Node<'a>> {
+    let mut cursor = node.walk();
+    node.named_children(&mut cursor).collect()
+}
+
+/// Named children of a block/body node that are real statements (not comments/extras).
+fn stmt_children_of<'a>(node: Node<'a>) -> Vec<Node<'a>> {
+    let mut cursor = node.walk();
+    node.named_children(&mut cursor)
+        .filter(|n| !n.is_extra())
+        .collect()
+}
+
+/// Returns (then_body, else_body) for an `if_statement` node.
+fn body_of_if<'a>(node: Node<'a>) -> (Option<Node<'a>>, Option<Node<'a>>) {
+    // Try grammar-defined field names first (most reliable).
+    let then = node
+        .child_by_field_name("consequence")
+        .or_else(|| node.child_by_field_name("body"));
+    let else_ = node.child_by_field_name("alternative");
+    if then.is_some() {
+        return (then, else_);
+    }
+    // Fallback: collect named children that look like statements.
+    let stmt_kids: Vec<Node<'a>> = named_children_of(node)
+        .into_iter()
+        .filter(|n| is_statement_kind(n.kind()))
+        .collect();
+    (stmt_kids.first().copied(), stmt_kids.get(1).copied())
+}
+
+/// Returns the body block/statement of a `for_statement` or `while_statement`.
+fn body_of_for_while<'a>(node: Node<'a>) -> Option<Node<'a>> {
+    node.child_by_field_name("body").or_else(|| {
+        named_children_of(node)
+            .into_iter()
+            .filter(|n| is_statement_kind(n.kind()))
+            .last()
+    })
+}
+
+/// Returns the body block/statement of a `do_while_statement`.
+fn body_of_do_while<'a>(node: Node<'a>) -> Option<Node<'a>> {
+    node.child_by_field_name("body").or_else(|| {
+        named_children_of(node)
+            .into_iter()
+            .find(|n| is_statement_kind(n.kind()))
+    })
+}
+
+/// Unwrap the tree-sitter-solidity `statement` wrapper to reveal the actual statement kind.
+fn unwrap_statement_node(node: Node) -> Node {
+    if node.kind() == "statement" {
+        if let Some(inner) = named_children_of(node)
+            .into_iter()
+            .find(|n| !n.is_extra())
+        {
+            return inner;
+        }
+    }
+    node
+}
+
+/// Returns `true` when an `if_statement` is purely a `if (cond) revert(...)` guard pattern
+/// with no else branch.
+fn is_if_revert_guard(if_node: &Node) -> bool {
+    let (then_body, else_body) = body_of_if(*if_node);
+    if else_body.is_some() {
+        return false; // if/else is real branching, not a guard
+    }
+    match then_body {
+        Some(b) => {
+            let actual = unwrap_statement_node(b);
+            if actual.kind() == "revert_statement" {
+                return true;
+            }
+            // Block containing only a revert
+            if is_statement_kind(actual.kind()) {
+                let inner = stmt_children_of(actual);
+                return inner.len() == 1 && {
+                    let n = unwrap_statement_node(inner[0]);
+                    n.kind() == "revert_statement"
+                };
+            }
+            false
+        }
+        None => false,
+    }
+}
+
+/// Returns `true` for calls that perform sensitive admin/protocol operations.
+/// Covers: contract destruction, ownership transfers, protocol pause/upgrade hooks.
+fn is_sensitive_call(node: &Node, source: &str) -> bool {
+    let text = node_text(node, source);
+    if text.contains("selfdestruct") || text.contains("suicide") {
+        return true;
+    }
+    let target_name = match get_call_target(node, source) {
+        Some(CallTarget::FreeFunction { name }) => name,
+        Some(CallTarget::MemberCall { method, .. }) => method,
+        None => return false,
+    };
+    matches!(
+        target_name,
+        "pause"
+            | "unpause"
+            | "initialize"
+            | "init"
+            | "setOwner"
+            | "changeOwner"
+            | "transferOwnership"
+            | "setAdmin"
+            | "addAdmin"
+            | "upgrade"
+            | "setImplementation"
+            | "setFee"
+            | "setRate"
+    )
+}
+
+// ---------------------------------------------------------------------------
+// Builder
+// ---------------------------------------------------------------------------
+
+struct Builder<'s> {
+    source: &'s str,
+    blocks: Vec<BasicBlock>,
+    next_id: usize,
+    entry: BasicBlockId,
+    exit: BasicBlockId,
+}
+
+impl<'s> Builder<'s> {
+    fn new(source: &'s str) -> Self {
+        let entry = BasicBlockId(0);
+        let exit = BasicBlockId(1);
+        let mut b = Self {
+            source,
+            blocks: Vec::with_capacity(8),
+            next_id: 2,
+            entry,
+            exit,
+        };
+        b.blocks.push(BasicBlock {
+            id: entry,
+            statements: vec![],
+            successors: SmallVec::new(),
+            predecessors: SmallVec::new(),
+        });
+        b.blocks.push(BasicBlock {
+            id: exit,
+            statements: vec![],
+            successors: SmallVec::new(),
+            predecessors: SmallVec::new(),
+        });
+        b
+    }
+
+    fn alloc(&mut self) -> BasicBlockId {
+        let id = BasicBlockId(self.next_id);
+        self.next_id += 1;
+        self.blocks.push(BasicBlock {
+            id,
+            statements: vec![],
+            successors: SmallVec::new(),
+            predecessors: SmallVec::new(),
+        });
+        id
+    }
+
+    fn idx(&self, id: BasicBlockId) -> Option<usize> {
+        self.blocks.iter().position(|b| b.id == id)
+    }
+
+    fn connect(&mut self, from: BasicBlockId, to: BasicBlockId) {
+        if let Some(i) = self.idx(from) {
+            if !self.blocks[i].successors.contains(&to) {
+                self.blocks[i].successors.push(to);
+            }
+        }
+        if let Some(i) = self.idx(to) {
+            if !self.blocks[i].predecessors.contains(&from) {
+                self.blocks[i].predecessors.push(from);
+            }
+        }
+    }
+
+    fn push(&mut self, id: BasicBlockId, stmt: CfgStatement) {
+        if let Some(i) = self.idx(id) {
+            self.blocks[i].statements.push(stmt);
+        }
+    }
+
+    /// A block is "terminated" when its last statement is Return or Revert.
+    fn is_terminated(&self, id: BasicBlockId) -> bool {
+        self.idx(id).is_some_and(|i| {
+            self.blocks[i]
+                .statements
+                .last()
+                .is_some_and(|s| matches!(s, CfgStatement::Return { .. } | CfgStatement::Revert { .. }))
+        })
+    }
+
+    /// Process a slice of statement nodes starting from `current`.
+    /// Returns the last reachable block (may be terminated).
+    fn process_stmts(
+        &mut self,
+        current: BasicBlockId,
+        exit: BasicBlockId,
+        stmts: &[Node],
+    ) -> BasicBlockId {
+        let mut block = current;
+        for stmt in stmts {
+            if self.is_terminated(block) {
+                break; // dead code after terminator
+            }
+            block = self.process_stmt(block, exit, stmt);
+        }
+        block
+    }
+
+    fn process_stmt(
+        &mut self,
+        current: BasicBlockId,
+        exit: BasicBlockId,
+        node: &Node,
+    ) -> BasicBlockId {
+        match node.kind() {
+            // tree-sitter-solidity 1.x wraps every statement inside a generic "statement" node;
+            // unwrap by recursing into the first non-extra named child.
+            "statement" => {
+                let inner: Vec<_> = named_children_of(*node)
+                    .into_iter()
+                    .filter(|n| !n.is_extra())
+                    .collect();
+                if let Some(child) = inner.first() {
+                    self.process_stmt(current, exit, child)
+                } else {
+                    current // empty statement wrapper
+                }
+            }
+
+            "if_statement" => self.process_if(current, exit, node),
+
+            "for_statement" | "while_statement" => self.process_for_while(current, exit, node),
+
+            "do_while_statement" => self.process_do_while(current, exit, node),
+
+            "return_statement" => {
+                self.push(current, CfgStatement::Return { byte_offset: node.start_byte() });
+                self.connect(current, exit);
+                current
+            }
+
+            "revert_statement" | "throw_statement" => {
+                self.push(current, CfgStatement::Revert { byte_offset: node.start_byte() });
+                self.connect(current, exit);
+                current
+            }
+
+            "emit_statement" => {
+                let line = node.start_position().row + 1;
+                self.push(current, CfgStatement::Emit { byte_offset: node.start_byte(), line });
+                current
+            }
+
+            "expression_statement" => {
+                let stmt = self.classify_expr_stmt(node);
+                let is_revert = matches!(stmt, CfgStatement::Revert { .. });
+                self.push(current, stmt);
+                if is_revert {
+                    self.connect(current, exit);
+                }
+                current
+            }
+
+            "variable_declaration_statement" => {
+                let stmt = self.classify_var_decl(node);
+                self.push(current, stmt);
+                current
+            }
+
+            // Nested blocks (anonymous scopes are rare but valid Solidity).
+            "block" | "statement_block" | "block_statement" | "function_body" => {
+                let stmts = stmt_children_of(*node);
+                self.process_stmts(current, exit, &stmts)
+            }
+
+            // break/continue: conservatively treated as Other (loop exits modelled via
+            // back-edges from the loop-body end; break would ideally go to `after` but
+            // the over-approximation is sound for taint).
+            "break_statement" | "continue_statement" => {
+                self.push(current, CfgStatement::Other { byte_offset: node.start_byte() });
+                current
+            }
+
+            _ => {
+                self.push(current, CfgStatement::Other { byte_offset: node.start_byte() });
+                current
+            }
+        }
+    }
+
+    fn process_if(
+        &mut self,
+        current: BasicBlockId,
+        exit: BasicBlockId,
+        node: &Node,
+    ) -> BasicBlockId {
+        // `if (cond) revert(...)` with no else → model as Guard (semantically require(cond)).
+        if is_if_revert_guard(node) {
+            self.push(
+                current,
+                CfgStatement::Guard {
+                    byte_offset: node.start_byte(),
+                    kind: GuardKind::IfRevert,
+                },
+            );
+            return current;
+        }
+
+        let merge = self.alloc();
+        let (then_node, else_node) = body_of_if(*node);
+
+        if let Some(else_n) = else_node {
+            let then_block = self.alloc();
+            let else_block = self.alloc();
+            self.connect(current, then_block);
+            self.connect(current, else_block);
+
+            if let Some(tn) = then_node {
+                let end = self.process_body(then_block, exit, &tn);
+                if !self.is_terminated(end) {
+                    self.connect(end, merge);
+                }
+            } else {
+                self.connect(then_block, merge);
+            }
+
+            let end = self.process_body(else_block, exit, &else_n);
+            if !self.is_terminated(end) {
+                self.connect(end, merge);
+            }
+        } else {
+            let then_block = self.alloc();
+            self.connect(current, then_block);
+            self.connect(current, merge);
+
+            if let Some(tn) = then_node {
+                let end = self.process_body(then_block, exit, &tn);
+                if !self.is_terminated(end) {
+                    self.connect(end, merge);
+                }
+            } else {
+                self.connect(then_block, merge);
+            }
+        }
+
+        merge
+    }
+
+    fn process_for_while(
+        &mut self,
+        current: BasicBlockId,
+        exit: BasicBlockId,
+        node: &Node,
+    ) -> BasicBlockId {
+        // current → header → [body_block, after]; body_block → header (back-edge).
+        let header = self.alloc();
+        let body_block = self.alloc();
+        let after = self.alloc();
+
+        self.connect(current, header);
+        self.connect(header, body_block);
+        self.connect(header, after);
+
+        if let Some(body) = body_of_for_while(*node) {
+            let end = self.process_body(body_block, exit, &body);
+            if !self.is_terminated(end) {
+                self.connect(end, header); // back-edge
+            }
+        } else {
+            self.connect(body_block, header);
+        }
+
+        after
+    }
+
+    fn process_do_while(
+        &mut self,
+        current: BasicBlockId,
+        exit: BasicBlockId,
+        node: &Node,
+    ) -> BasicBlockId {
+        let body_block = self.alloc();
+        let after = self.alloc();
+
+        self.connect(current, body_block);
+
+        if let Some(body) = body_of_do_while(*node) {
+            let end = self.process_body(body_block, exit, &body);
+            if !self.is_terminated(end) {
+                self.connect(end, body_block); // back-edge (iterate again)
+                self.connect(end, after); // or exit loop
+            }
+        } else {
+            self.connect(body_block, after);
+        }
+
+        after
+    }
+
+    /// Process either a block node (recurse into children) or a single statement.
+    fn process_body(
+        &mut self,
+        current: BasicBlockId,
+        exit: BasicBlockId,
+        node: &Node,
+    ) -> BasicBlockId {
+        match node.kind() {
+            "block" | "statement_block" | "function_body" | "block_statement" => {
+                let stmts = stmt_children_of(*node);
+                self.process_stmts(current, exit, &stmts)
+            }
+            _ => self.process_stmt(current, exit, node),
+        }
+    }
+
+    /// Classify an `expression_statement` into the appropriate `CfgStatement`.
+    fn classify_expr_stmt(&self, node: &Node) -> CfgStatement {
+        let byte_offset = node.start_byte();
+        let line = node.start_position().row + 1;
+
+        // Search descendants for call_expression nodes.
+        let calls = find_nodes_of_kind(node, "call_expression");
+
+        // Priority 1: external calls (.call / .send / .transfer / .delegatecall / .staticcall).
+        for call in &calls {
+            if is_external_call(call, self.source) {
+                return CfgStatement::ExternalCall {
+                    byte_offset: call.start_byte(),
+                    line: call.start_position().row + 1,
+                };
+            }
+        }
+
+        // Priority 2: guard calls (require / assert).
+        for call in &calls {
+            if let Some(CallTarget::FreeFunction { name }) = get_call_target(call, self.source) {
+                match name {
+                    "require" => {
+                        return CfgStatement::Guard {
+                            byte_offset: call.start_byte(),
+                            kind: GuardKind::Require,
+                        };
+                    }
+                    "assert" => {
+                        return CfgStatement::Guard {
+                            byte_offset: call.start_byte(),
+                            kind: GuardKind::Assert,
+                        };
+                    }
+                    "revert" => {
+                        // revert() function-call form (pre-0.8 style).
+                        return CfgStatement::Revert {
+                            byte_offset: call.start_byte(),
+                        };
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // Priority 3: sensitive calls (selfdestruct / suicide).
+        for call in &calls {
+            if is_sensitive_call(call, self.source) {
+                return CfgStatement::InternalCallSensitive {
+                    byte_offset: call.start_byte(),
+                    line: call.start_position().row + 1,
+                };
+            }
+        }
+
+        // Priority 4: other function calls → InternalCall.
+        if !calls.is_empty() {
+            return CfgStatement::InternalCall { byte_offset, line };
+        }
+
+        // Priority 5: assignment expressions.
+        let assignments = find_nodes_of_kind(node, "assignment_expression");
+        let augmented = find_nodes_of_kind(node, "augmented_assignment_expression");
+
+        for assign in assignments.iter().chain(augmented.iter()) {
+            return if is_state_write(assign) {
+                CfgStatement::StateWrite {
+                    byte_offset: assign.start_byte(),
+                    line: assign.start_position().row + 1,
+                }
+            } else {
+                CfgStatement::LocalAssignment {
+                    byte_offset: assign.start_byte(),
+                    line: assign.start_position().row + 1,
+                }
+            };
+        }
+
+        CfgStatement::Other { byte_offset }
+    }
+
+    /// Classify a `variable_declaration_statement`.
+    ///
+    /// `(bool ok, ) = addr.call{...}("")` is a variable declaration whose initialiser
+    /// contains an external call; we classify the whole statement as ExternalCall so
+    /// that taint can flow from it.
+    fn classify_var_decl(&self, node: &Node) -> CfgStatement {
+        let byte_offset = node.start_byte();
+        let line = node.start_position().row + 1;
+
+        let calls = find_nodes_of_kind(node, "call_expression");
+        for call in &calls {
+            if is_external_call(call, self.source) {
+                return CfgStatement::ExternalCall {
+                    byte_offset: call.start_byte(),
+                    line: call.start_position().row + 1,
+                };
+            }
+        }
+
+        CfgStatement::LocalAssignment { byte_offset, line }
     }
 }
 
@@ -370,10 +964,11 @@ mod tests {
                 function f() external { }
             }"#;
             let cfg = build_cfg_for_first_function(src);
-            assert!(
-                cfg.is_none(),
-                "empty body: builder may return None until implemented"
-            );
+            // Empty body → entry connected directly to exit, no statements.
+            let cfg = cfg.expect("empty body should produce a minimal entry→exit CFG");
+            assert!(cfg.block(cfg.entry).is_some());
+            assert!(cfg.block(cfg.exit).is_some());
+            assert!(cfg.block(cfg.entry).unwrap().statements.is_empty());
         }
 
         #[test]
@@ -395,9 +990,13 @@ mod tests {
                 }
             }"#;
             let cfg = build_cfg_for_first_function(src);
+            let cfg = cfg.expect("single-statement function should produce a CFG");
+            // Entry block should contain the Guard statement.
+            let entry_block = cfg.block(cfg.entry).expect("entry block exists");
             assert!(
-                cfg.is_none(),
-                "single-statement: builder returns None until implemented"
+                entry_block.statements.iter().any(|s| matches!(s, CfgStatement::Guard { .. })),
+                "expected a Guard statement in entry block, got: {:?}",
+                entry_block.statements.iter().map(|s| s.to_string()).collect::<Vec<_>>()
             );
         }
 
@@ -437,10 +1036,9 @@ mod tests {
                 }
             }"#;
             let cfg = build_cfg_for_first_function(src);
-            assert!(
-                cfg.is_none(),
-                "deeply nested: None until builder implemented"
-            );
+            let cfg = cfg.expect("deeply nested branches should produce a CFG");
+            // Should have multiple blocks (entry + many if-branches + merge blocks).
+            assert!(cfg.blocks.len() > 3, "expected multiple blocks for nested ifs");
         }
 
         #[test]
@@ -452,7 +1050,7 @@ mod tests {
                 }
             }"#;
             let cfg = build_cfg_for_first_function(src);
-            assert!(cfg.is_none(), "try/catch: None until builder handles it");
+            assert!(cfg.is_none(), "try/catch: conservative None (not yet handled)");
         }
 
         #[test]
@@ -463,10 +1061,9 @@ mod tests {
                 function f() external m() { }
             }"#;
             let cfg = build_cfg_for_first_function(src);
-            assert!(
-                cfg.is_none(),
-                "modifier-only / body just _: None until implemented"
-            );
+            // Empty body with modifier: modifier inlining is deferred; raw body is empty.
+            let cfg = cfg.expect("empty body with modifier should produce a minimal CFG");
+            assert!(cfg.block(cfg.entry).is_some());
         }
     }
 }
