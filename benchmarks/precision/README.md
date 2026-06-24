@@ -8,14 +8,14 @@ signal.
 ## Inputs
 
 `corpus.toml` pins eight upstream repositories to a tag or SHA. On first
-`just fetch`, the script resolves each tag to an immutable SHA and writes
+`make fetch`, the script resolves each tag to an immutable SHA and writes
 it to `benchmarks/vendor/precision/<name>/.veil-resolved-sha`. That SHA
 is what the README cites.
 
 ## Workflow
 
-1. `just fetch` (once, or after bumping a `rev` in corpus.toml).
-2. `just bench-precision`. This:
+1. `make fetch` (once, or after bumping a `rev` in corpus.toml).
+2. `make bench-precision`. This:
    - scans every `.sol` file under `benchmarks/vendor/precision/` that
      matches the corpus's `include` globs and does not match its
      `exclude` globs;
@@ -50,7 +50,7 @@ history unless explicitly removed in the same PR as the triage update.
 
 ```
 git clean -fdx benchmarks/vendor benchmarks/precision/results
-just fetch
-just bench-precision
+make fetch
+make bench-precision
 cat benchmarks/precision/results/summary.md
 ```

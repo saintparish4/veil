@@ -8,7 +8,7 @@ history of every claim is auditable from `git log`.
 ## Philosophy
 
 1. **One command per claim.** Every bullet in the README's *Proof points*
-   section ends with a `just …` invocation. If the command cannot be re-run
+   section ends with a `make …` invocation. If the command cannot be re-run
    to reproduce the number, the number does not belong in the README.
 2. **Pinned inputs.** Large upstream corpora (OpenZeppelin, Uniswap, Aave,
    Compound, Curve, Lido, Maker, SmartBugs) are fetched at frozen commit
@@ -21,10 +21,9 @@ history of every claim is auditable from `git log`.
    `veil::scan_file_with` and `veil::detectors::build_registry` — the
    exact functions the `veil` binary uses. No special benchmark-only code
    paths, no mocks.
-4. **Windows-compatible.** Orchestration lives in Rust (`xtask`) rather
-   than shell scripts, and the root `justfile` uses PowerShell on Windows.
-   A contributor on any of the three major OSes runs `just bench` and gets
-   the same artifacts.
+4. **Windows-compatible.** Orchestration lives in Rust (`xtask`), invoked
+   through the root `Makefile`, rather than shell scripts. A contributor on
+   any of the three major OSes runs `make bench` and gets the same artifacts.
 
 ## Layout
 
@@ -48,7 +47,7 @@ benchmarks/
 │   ├── swc-mapping.md
 │   └── sarif-conformance.md
 ├── scripts/            ← thin wrappers that call `cargo xtask fetch`
-└── vendor/             ← .gitignored, populated by `just fetch`
+└── vendor/             ← .gitignored, populated by `make fetch`
 ```
 
 ## Ground-truth format
@@ -114,18 +113,18 @@ A `POSTMORTEM.md` alongside `contract.sol` cites the original source
 
 ```bash
 # One-time setup — fetch the pinned upstream corpora (~GB of Solidity).
-just fetch
+make fetch
 
 # Full pipeline, in dependency order.
-just bench
+make bench
 
 # Individual suites.
-just bench-perf        # Criterion + p50/p95/p99 summary
-just bench-precision   # false-positive rate on audited production code
-just bench-recall      # true-positive rate on labeled vulnerabilities
-just bench-exploits    # historical-incident reconstructions
-just bench-standards   # OWASP / SWC / SARIF conformance
-just coverage          # line coverage via cargo-llvm-cov
+make bench-perf        # Criterion + p50/p95/p99 summary
+make bench-precision   # false-positive rate on audited production code
+make bench-recall      # true-positive rate on labeled vulnerabilities
+make bench-exploits    # historical-incident reconstructions
+make bench-standards   # OWASP / SWC / SARIF conformance
+make coverage          # line coverage via cargo-llvm-cov
 ```
 
 All commands are idempotent. Result artifacts are re-written in place —

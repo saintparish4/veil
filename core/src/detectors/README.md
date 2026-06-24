@@ -51,6 +51,21 @@ to the shared `findings` vec. The context provides:
 
 ---
 
+## Adding Detection Without Forking Core
+
+The guide below covers adding a **built-in** detector to this crate. If you don't
+want to fork Veil, there are two out-of-tree options:
+
+- **Custom Rust detectors** — implement the same [`Detector`] trait against the
+  [`veil-plugin`](../../../veil-plugin/README.md) crate from your own workspace.
+  It re-exports `AnalysisContext`, the CFG/taint types, DeFi-pattern helpers, and
+  the AST utilities, so plugin detectors have the same capabilities as the ones here.
+- **TOML pattern rules** — for predicate-style checks (function name / modifier /
+  body matches), drop a `.veil/rules/*.toml` file in your project. No Rust required;
+  see the *Custom Rules* section of the [project README](../../../README.md#custom-rules).
+
+Add a built-in detector here only when the check ships with Veil itself.
+
 ## How to Add a New Detector
 
 ### 1. Create the detector file

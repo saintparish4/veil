@@ -6,7 +6,7 @@ Measures Veil's true-positive rate on a labeled vulnerability corpus.
 
 - `swc/` -- curated SWC Registry subset (MIT), committed directly.
 - `vendor/recall/smartbugs-curated/` -- fetched at pinned SHA via
-  `just fetch`. Gitignored.
+  `make fetch`. Gitignored.
 - (optional) `vendor/recall/smartbugs-wild/`,
   `vendor/recall/not-so-smart-contracts/` -- larger optional sources.
 
@@ -34,8 +34,8 @@ A finding matches a label iff:
 ## Reproduction
 
 ```
-just fetch           # populates benchmarks/vendor/recall/ (SmartBugs, etc.)
-just bench-recall    # runs cargo xtask recall; writes results/
+make fetch           # populates benchmarks/vendor/recall/ (SmartBugs, etc.)
+make bench-recall    # runs cargo xtask recall; writes results/
 ```
 
 ## Outputs (all committed)
@@ -68,8 +68,8 @@ fixtures. Remove the probe entry if you ever want a clean 100% headline
 
 ## Updating
 
-1. Land a new detector or fix a miss -> `just bench-recall` -> commit the diff
+1. Land a new detector or fix a miss -> `make bench-recall` -> commit the diff
    under `results/`.
 2. Add new labels -> add entries to `labels.yml` -> re-run -> commit.
-3. Bump a fetched corpus -> edit `corpus.toml` rev -> `just fetch --update` ->
+3. Bump a fetched corpus -> edit `corpus.toml` rev -> `cargo xtask fetch --corpus recall --update` ->
    re-run -> commit.

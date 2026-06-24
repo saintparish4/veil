@@ -8,8 +8,8 @@ size-scaling fixtures generated in-memory.
 
 | Artifact | Populated by | Status |
 |---|---|---|
-| `results/summary.json` — per-bench mean/median/p50/p95/p99 over `scan_file/*` | **Phase 2** (`just bench-perf`) | Populated — see table below |
-| `results/summary.json` — `aggregate.corpus_median_ns`, `aggregate.corpus_elements` | **Phase 3** (`just fetch && just bench-perf`) after the precision corpus is vendored into `benchmarks/vendor/precision/` | `null` until Phase 3 lands |
+| `results/summary.json` — per-bench mean/median/p50/p95/p99 over `scan_file/*` | **Phase 2** (`make bench-perf`) | Populated — see table below |
+| `results/summary.json` — `aggregate.corpus_median_ns`, `aggregate.corpus_elements` | **Phase 3** (`make fetch && make bench-perf`) after the precision corpus is vendored into `benchmarks/vendor/precision/` | `null` until Phase 3 lands |
 | `results/comparison.md` — wall-time vs. Slither | **Phase 2 optional** (`cargo xtask perf --compare slither`), requires Docker | Not generated — opt-in flag |
 | Criterion HTML per bench | **Phase 2** (`cargo bench -p veil --bench scan_bench`) | Regenerated in place, not committed |
 
@@ -92,7 +92,7 @@ median on the reference machine that produced this run).
 
 ```bash
 # Full run, a few minutes, writes results/summary.json + Criterion HTML.
-just bench-perf
+make bench-perf
 
 # Quick smoke (single-shot per bench, ~30s; does not write summary.json).
 cargo bench -p veil --bench scan_bench -- --quick
@@ -103,9 +103,7 @@ cargo xtask perf --compare slither
 
 Absolute numbers depend on the host CPU/kernel. Only relative numbers
 (median ratios, percentile spreads, regressions vs. `main`) are meaningful
-across machines. The `bench.yml` workflow runs this on a fixed GitHub
-Actions runner class so committed `summary.json` diffs are comparable
-across PRs.
+across machines.
 
 ## When to update the committed `summary.json`
 
