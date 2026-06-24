@@ -18,6 +18,8 @@ pub struct ControlFlowGraph {
 pub struct BasicBlock {
     pub id: BasicBlockId,
     pub statements: Vec<CfgStatement>,
+    /// Structured storage reads/writes extracted from `statements`, populated by the Builder.
+    pub storage_ops: Vec<StorageOp>,
     pub successors: SmallVec<[BasicBlockId; 2]>,
     pub predecessors: SmallVec<[BasicBlockId; 4]>,
 }
@@ -26,10 +28,15 @@ pub enum CfgStatement {
     ExternalCall {
         byte_offset: usize,
         line: usize,
+        /// Optional rich metadata (call kind, target, value). `None` is always valid;
+        /// detectors that don't need it pay no cost.
+        meta: Option<Box<CallMeta>>,
     },
     StateWrite {
         byte_offset: usize,
         line: usize,
+        /// Optional slot expression. `None` when the LHS couldn't be resolved.
+        slot: Option<Box<StorageSlotExpr>>,
     },
     LocalAssignment {
         byte_offset: usize,
@@ -52,6 +59,8 @@ pub enum CfgStatement {
     InternalCall {
         byte_offset: usize,
         line: usize,
+        /// Name of the called function when the callee could be resolved statically.
+        callee_name: Option<String>,
     },
     /// Internal call to a sensitive target (e.g. delegatecall, selfdestruct, pause).
     InternalCallSensitive {
@@ -69,6 +78,52 @@ pub enum GuardKind {
     IfRevert,
 }
 
+/// How an external call is dispatched.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CallKind {
+    LowLevelCall,
+    DelegateCall,
+    StaticCall,
+    Transfer,
+    Send,
+}
+
+/// Rich metadata attached to an `ExternalCall` statement.
+#[derive(Debug, Clone)]
+pub struct CallMeta {
+    pub call_kind: CallKind,
+    /// The textual expression of the call target (e.g. `"addr"` in `addr.call(...)`).
+    pub target_expr: Option<String>,
+    /// Whether the call includes a `{value: ...}` option.
+    pub value_sent: bool,
+}
+
+/// Describes the Solidity storage slot accessed by a `StateWrite` or `StateRead`.
+#[derive(Debug, Clone)]
+pub struct StorageSlotExpr {
+    /// Full text of the LHS expression (e.g. `"balances[msg.sender]"`).
+    pub slot_expr: String,
+    /// True when the expression is a mapping access (contains `[`).
+    pub is_mapping: bool,
+    /// The key expression for a mapping access (e.g. `"msg.sender"`).
+    pub key_expr: Option<String>,
+}
+
+/// A structured storage operation extracted from a basic block's statements.
+#[derive(Debug, Clone)]
+pub struct StorageOp {
+    pub kind: StorageOpKind,
+    pub slot: StorageSlotExpr,
+    pub byte_offset: usize,
+    pub line: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StorageOpKind {
+    Load,
+    Store,
+}
+
 impl fmt::Display for GuardKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -82,8 +137,20 @@ impl fmt::Display for GuardKind {
 impl fmt::Display for CfgStatement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CfgStatement::ExternalCall { line, .. } => write!(f, "ExternalCall(line {})", line),
-            CfgStatement::StateWrite { line, .. } => write!(f, "StateWrite(line {})", line),
+            CfgStatement::ExternalCall { line, meta, .. } => {
+                if let Some(m) = meta {
+                    write!(f, "ExternalCall(line {}, {:?})", line, m.call_kind)
+                } else {
+                    write!(f, "ExternalCall(line {})", line)
+                }
+            }
+            CfgStatement::StateWrite { line, slot, .. } => {
+                if let Some(s) = slot {
+                    write!(f, "StateWrite(line {}, slot={})", line, s.slot_expr)
+                } else {
+                    write!(f, "StateWrite(line {})", line)
+                }
+            }
             CfgStatement::LocalAssignment { byte_offset, .. } => {
                 write!(f, "LocalAssignment(byte {})", byte_offset)
             }
@@ -93,7 +160,13 @@ impl fmt::Display for CfgStatement {
             CfgStatement::Emit { line, .. } => write!(f, "Emit(line {})", line),
             CfgStatement::Return { byte_offset } => write!(f, "Return(byte {})", byte_offset),
             CfgStatement::Revert { byte_offset } => write!(f, "Revert(byte {})", byte_offset),
-            CfgStatement::InternalCall { line, .. } => write!(f, "InternalCall(line {})", line),
+            CfgStatement::InternalCall { line, callee_name, .. } => {
+                if let Some(name) = callee_name {
+                    write!(f, "InternalCall({}, line {})", name, line)
+                } else {
+                    write!(f, "InternalCall(line {})", line)
+                }
+            }
             CfgStatement::InternalCallSensitive { line, .. } => {
                 write!(f, "InternalCallSensitive(line {})", line)
             }
@@ -458,6 +531,50 @@ fn is_sensitive_call(node: &Node, source: &str) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Metadata helpers
+// ---------------------------------------------------------------------------
+
+/// Extract call kind and basic metadata from a `call_expression` node.
+fn build_call_meta(call: &Node, source: &str) -> CallMeta {
+    let call_text = node_text(call, source);
+    let (call_kind, target_expr) = match get_call_target(call, source) {
+        Some(CallTarget::MemberCall { method, object }) => {
+            let kind = match method {
+                "delegatecall" => CallKind::DelegateCall,
+                "staticcall" => CallKind::StaticCall,
+                "transfer" => CallKind::Transfer,
+                "send" => CallKind::Send,
+                _ => CallKind::LowLevelCall,
+            };
+            (kind, Some(object.to_string()))
+        }
+        Some(CallTarget::FreeFunction { name }) => {
+            (CallKind::LowLevelCall, Some(name.to_string()))
+        }
+        None => (CallKind::LowLevelCall, None),
+    };
+    let value_sent = call_text.contains("{value:");
+    CallMeta { call_kind, target_expr, value_sent }
+}
+
+/// Extract storage slot expression from the LHS of an assignment.
+fn build_slot_expr(assign: &Node, source: &str) -> Option<StorageSlotExpr> {
+    let lhs = assign.child_by_field_name("left").or_else(|| assign.child(0))?;
+    let slot_expr = node_text(&lhs, source).to_string();
+    let is_mapping = slot_expr.contains('[');
+    let key_expr = if is_mapping {
+        // Grab the first `[key]` subscript text as the key expression.
+        lhs.children(&mut lhs.walk())
+            .find(|c| c.kind() == "index_access" || c.kind() == "member_expression")
+            .and_then(|ie| ie.child_by_field_name("index"))
+            .map(|k| node_text(&k, source).to_string())
+    } else {
+        None
+    };
+    Some(StorageSlotExpr { slot_expr, is_mapping, key_expr })
+}
+
+// ---------------------------------------------------------------------------
 // Builder
 // ---------------------------------------------------------------------------
 
@@ -483,12 +600,14 @@ impl<'s> Builder<'s> {
         b.blocks.push(BasicBlock {
             id: entry,
             statements: vec![],
+            storage_ops: vec![],
             successors: SmallVec::new(),
             predecessors: SmallVec::new(),
         });
         b.blocks.push(BasicBlock {
             id: exit,
             statements: vec![],
+            storage_ops: vec![],
             successors: SmallVec::new(),
             predecessors: SmallVec::new(),
         });
@@ -501,6 +620,7 @@ impl<'s> Builder<'s> {
         self.blocks.push(BasicBlock {
             id,
             statements: vec![],
+            storage_ops: vec![],
             successors: SmallVec::new(),
             predecessors: SmallVec::new(),
         });
@@ -776,9 +896,11 @@ impl<'s> Builder<'s> {
         // Priority 1: external calls (.call / .send / .transfer / .delegatecall / .staticcall).
         for call in &calls {
             if is_external_call(call, self.source) {
+                let meta = build_call_meta(call, self.source);
                 return CfgStatement::ExternalCall {
                     byte_offset: call.start_byte(),
                     line: call.start_position().row + 1,
+                    meta: Some(Box::new(meta)),
                 };
             }
         }
@@ -822,7 +944,14 @@ impl<'s> Builder<'s> {
 
         // Priority 4: other function calls → InternalCall.
         if !calls.is_empty() {
-            return CfgStatement::InternalCall { byte_offset, line };
+            let callee_name = calls.first().and_then(|c| {
+                if let Some(CallTarget::FreeFunction { name }) = get_call_target(c, self.source) {
+                    Some(name.to_string())
+                } else {
+                    None
+                }
+            });
+            return CfgStatement::InternalCall { byte_offset, line, callee_name };
         }
 
         // Priority 5: assignment expressions.
@@ -831,9 +960,11 @@ impl<'s> Builder<'s> {
 
         for assign in assignments.iter().chain(augmented.iter()) {
             return if is_state_write(assign) {
+                let slot = build_slot_expr(assign, self.source);
                 CfgStatement::StateWrite {
                     byte_offset: assign.start_byte(),
                     line: assign.start_position().row + 1,
+                    slot: slot.map(Box::new),
                 }
             } else {
                 CfgStatement::LocalAssignment {
@@ -858,9 +989,11 @@ impl<'s> Builder<'s> {
         let calls = find_nodes_of_kind(node, "call_expression");
         for call in &calls {
             if is_external_call(call, self.source) {
+                let meta = build_call_meta(call, self.source);
                 return CfgStatement::ExternalCall {
                     byte_offset: call.start_byte(),
                     line: call.start_position().row + 1,
+                    meta: Some(Box::new(meta)),
                 };
             }
         }
@@ -891,6 +1024,7 @@ mod tests {
                     byte_offset: 45,
                     kind: GuardKind::Require,
                 }],
+                storage_ops: vec![],
                 successors: smallvec![BasicBlockId(1), BasicBlockId(2)],
                 predecessors: smallvec![],
             },
@@ -899,7 +1033,9 @@ mod tests {
                 statements: vec![CfgStatement::ExternalCall {
                     byte_offset: 100,
                     line: 8,
+                    meta: None,
                 }],
+                storage_ops: vec![],
                 successors: smallvec![BasicBlockId(3)],
                 predecessors: smallvec![BasicBlockId(0)],
             },
@@ -908,13 +1044,16 @@ mod tests {
                 statements: vec![CfgStatement::StateWrite {
                     byte_offset: 120,
                     line: 10,
+                    slot: None,
                 }],
+                storage_ops: vec![],
                 successors: smallvec![BasicBlockId(3)],
                 predecessors: smallvec![BasicBlockId(0)],
             },
             BasicBlock {
                 id: BasicBlockId(3),
                 statements: vec![],
+                storage_ops: vec![],
                 successors: smallvec![],
                 predecessors: smallvec![BasicBlockId(1), BasicBlockId(2)],
             },

@@ -1109,7 +1109,27 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-language",
  "tree-sitter-solidity",
+ "veil-evm",
  "walkdir",
+]
+
+[[package]]
+name = "veil-evm"
+version = "0.1.0"
+dependencies = [
+ "insta",
+ "serde",
+ "serde_json",
+ "tracing",
+]
+
+[[package]]
+name = "veil-plugin"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "tree-sitter",
+ "veil",
 ]
 
 [[package]]

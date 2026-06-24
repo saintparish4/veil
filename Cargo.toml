@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["core", "xtask"]
+members = ["core", "xtask", "veil-plugin", "veil-evm"]
 
 # Optimize the distributed binary: full LTO + a single codegen unit maximize
 # runtime speed (the scanner's headline is sub-10ms per file), and stripping

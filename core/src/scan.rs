@@ -3,6 +3,7 @@
 //! Returns `ScanOutcome` with both findings and errors (partial success).
 
 use crate::detector_trait::{AnalysisContext, DetectorRegistry};
+use crate::rule_engine::{run_pattern_rules, PatternRule};
 use crate::suppression;
 use crate::types::{Finding, ScanError, ScanErrorKind, ScanOutcome, Severity, Statistics};
 use rayon::prelude::*;
@@ -27,12 +28,64 @@ thread_local! {
     RefCell::new(new_solidity_parser().expect("Solidity grammar load failed at thread int"));
 }
 
+// ---------------------------------------------------------------------------
+// Core inner scanner (shared by all public entry points)
+// ---------------------------------------------------------------------------
+
+/// Inner scan: runs detectors + pattern rules on an already-parsed tree.
+///
+/// Separated from the I/O path so that callers that already have the source and
+/// tree (e.g. REPL tools or test harnesses) don't pay a second parse.
+fn scan_parsed(
+    file_path: &str,
+    source: &str,
+    tree: &tree_sitter::Tree,
+    registry: &DetectorRegistry,
+    pattern_rules: &[PatternRule],
+) -> Vec<Finding> {
+    let ctx = AnalysisContext::new(tree, source).with_file_path(file_path);
+    let mut findings = Vec::new();
+
+    // Built-in detectors
+    registry.run_all(&ctx, &mut findings);
+
+    // TOML pattern rules — run against the same already-built AnalysisContext
+    if !pattern_rules.is_empty() {
+        let pr = run_pattern_rules(pattern_rules, &ctx.functions, source, Some(file_path));
+        findings.extend(pr);
+    }
+
+    for f in &mut findings {
+        f.file = Some(file_path.to_string());
+        f.compute_id();
+    }
+
+    suppression::filter_findings_by_inline_ignores(findings, source)
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
 /// Scan a single file using the provided registry.
 /// Returns `ScanOutcome` containing findings and any errors encountered.
 pub fn scan_file_with(
     file_path: &str,
     registry: &DetectorRegistry,
     parser: &mut tree_sitter::Parser,
+) -> ScanOutcome {
+    scan_file_with_patterns(file_path, registry, parser, &[])
+}
+
+/// Scan a single file, running built-in detectors AND TOML pattern rules.
+///
+/// Pattern rules are evaluated on the same parse tree as the built-in detectors,
+/// so no second parse pass is performed.
+pub fn scan_file_with_patterns(
+    file_path: &str,
+    registry: &DetectorRegistry,
+    parser: &mut tree_sitter::Parser,
+    pattern_rules: &[PatternRule],
 ) -> ScanOutcome {
     let t0 = Instant::now();
     tracing::debug!(file = file_path, detectors = registry.len(), "scan start");
@@ -69,16 +122,7 @@ pub fn scan_file_with(
         }
     };
 
-    let ctx = AnalysisContext::new(&tree, &source).with_file_path(file_path);
-    let mut findings = Vec::new();
-    registry.run_all(&ctx, &mut findings);
-
-    for f in &mut findings {
-        f.file = Some(file_path.to_string());
-        f.compute_id();
-    }
-
-    let findings = suppression::filter_findings_by_inline_ignores(findings, &source);
+    let findings = scan_parsed(file_path, &source, &tree, registry, pattern_rules);
 
     tracing::info!(
         file = file_path,
@@ -95,13 +139,27 @@ pub fn scan_file_with(
     }
 }
 
-/// Scan a directory (optionally recursive) using the provided registry
-/// Files are scanned in parallel; each rayon worker uses its own thread-local Parser
-/// Returns aggregated `ScanOutcome` across all files
+/// Scan a directory (optionally recursive) using the provided registry.
+///
+/// Files are scanned in parallel; each rayon worker uses its own thread-local parser.
+/// Returns aggregated `ScanOutcome` across all files.
 pub fn scan_directory_with(
     dir_path: &str,
     recursive: bool,
     registry: &DetectorRegistry,
+) -> ScanOutcome {
+    scan_directory_with_patterns(dir_path, recursive, registry, &[])
+}
+
+/// Scan a directory, running built-in detectors AND TOML pattern rules in one pass per file.
+///
+/// Pattern rules are evaluated on the same parse tree as the built-in detectors — no
+/// second parse pass.
+pub fn scan_directory_with_patterns(
+    dir_path: &str,
+    recursive: bool,
+    registry: &DetectorRegistry,
+    pattern_rules: &[PatternRule],
 ) -> ScanOutcome {
     let walker = if recursive {
         WalkDir::new(dir_path)
@@ -109,7 +167,7 @@ pub fn scan_directory_with(
         WalkDir::new(dir_path).max_depth(1)
     };
 
-    // I collect paths first so rayon can divide the work evenly before any I/O starts
+    // Collect paths first so rayon can divide the work evenly before I/O starts.
     let paths: Vec<String> = walker
         .into_iter()
         .filter_map(|e| e.ok())
@@ -123,12 +181,11 @@ pub fn scan_directory_with(
     let partial_outcomes: Vec<ScanOutcome> = paths
         .par_iter()
         .map(|path_str| {
-            // I borrow the thread-local parser mutably inside the closure
             // RefCell::borrow_mut() panics if called re-entrantly on the same thread,
-            // but rayon never runs two tasks on the same thread simultaneously, so this is safe
+            // but rayon never runs two tasks on the same thread simultaneously, so this is safe.
             PARSER.with(|cell| {
                 let mut parser = cell.borrow_mut();
-                scan_file_with(path_str, registry, &mut parser)
+                scan_file_with_patterns(path_str, registry, &mut parser, pattern_rules)
             })
         })
         .collect();

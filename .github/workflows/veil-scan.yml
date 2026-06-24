@@ -1,0 +1,169 @@
+name: Veil Security Scan
+
+# Reusable workflow — call it from your project's CI:
+#
+#   jobs:
+#     security:
+#       uses: saintparish4/veil/.github/workflows/veil-scan.yml@main
+#       with:
+#         path: contracts/
+#         fail-on-new-only: true
+#         baseline-path: .veil/baseline.json
+#
+# Or copy this file directly into your repo and adjust the `uses:` path.
+
+on:
+  workflow_call:
+    inputs:
+      path:
+        description: "File or directory to scan (default: current directory)"
+        default: "."
+        type: string
+      recursive:
+        description: "Scan directories recursively"
+        default: true
+        type: boolean
+      severity-threshold:
+        description: "Minimum severity to gate on (Low|Medium|High|Critical)"
+        default: "High"
+        type: string
+      baseline-path:
+        description: "Path to baseline JSON to suppress known findings"
+        default: ""
+        type: string
+      fail-on-new-only:
+        description: "Only fail when new findings are introduced vs baseline"
+        default: false
+        type: boolean
+      upload-sarif:
+        description: "Upload SARIF results to GitHub Code Scanning"
+        default: true
+        type: boolean
+      veil-version:
+        description: "veil release tag to install (e.g. v0.2.0); omit to build from source"
+        default: ""
+        type: string
+    secrets:
+      token:
+        description: "GitHub token for SARIF upload (defaults to GITHUB_TOKEN)"
+        required: false
+
+permissions:
+  contents: read
+  security-events: write   # required for SARIF upload
+
+jobs:
+  veil:
+    name: Veil smart-contract scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Install veil ───────────────────────────────────────────────────────
+
+      - name: Install veil from release (if version specified)
+        if: inputs.veil-version != ''
+        run: |
+          VERSION="${{ inputs.veil-version }}"
+          ASSET="veil-x86_64-unknown-linux-gnu.tar.gz"
+          URL="https://github.com/saintparish4/veil/releases/download/${VERSION}/${ASSET}"
+          curl -fsSL "$URL" -o veil.tar.gz
+          tar xzf veil.tar.gz
+          chmod +x veil
+          sudo mv veil /usr/local/bin/veil
+          veil --version
+
+      - name: Build veil from source (no version pinned)
+        if: inputs.veil-version == ''
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Cargo build (source install)
+        if: inputs.veil-version == ''
+        run: cargo install --path core --locked
+
+      # ── Scan ───────────────────────────────────────────────────────────────
+
+      - name: Run veil scan (SARIF)
+        id: scan
+        run: |
+          set +e
+          ARGS="${{ inputs.path }}"
+          if [ "${{ inputs.recursive }}" = "true" ]; then ARGS="$ARGS --recursive"; fi
+          if [ -n "${{ inputs.baseline-path }}" ]; then ARGS="$ARGS --baseline ${{ inputs.baseline-path }}"; fi
+
+          veil scan $ARGS --format sarif > veil-results.sarif 2>veil-errors.txt
+          SCAN_EXIT=$?
+
+          # Also produce JSON for diff
+          veil scan $ARGS --format json > veil-results.json 2>/dev/null || true
+
+          echo "scan-exit=${SCAN_EXIT}" >> "$GITHUB_OUTPUT"
+
+          if [ -s veil-errors.txt ]; then
+            echo "::warning::veil scan errors:"
+            cat veil-errors.txt
+          fi
+
+      # ── Upload SARIF ────────────────────────────────────────────────────────
+
+      - name: Upload SARIF to GitHub Code Scanning
+        if: inputs.upload-sarif && always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: veil-results.sarif
+          category: veil
+
+      # ── Diff gate (fail-on-new-only) ────────────────────────────────────────
+
+      - name: Diff against baseline (fail-on-new-only)
+        if: inputs.fail-on-new-only && inputs.baseline-path != ''
+        run: |
+          if [ ! -f "${{ inputs.baseline-path }}" ]; then
+            echo "::notice::No baseline file found at ${{ inputs.baseline-path }} — skipping diff gate"
+            exit 0
+          fi
+          veil diff "${{ inputs.baseline-path }}" veil-results.json --format terminal
+          # veil diff exits 1 when new findings exist
+          DIFF_EXIT=$?
+          if [ $DIFF_EXIT -ne 0 ]; then
+            echo "::error::New security findings introduced — see diff output above"
+            exit 1
+          fi
+
+      # ── Severity gate (default) ─────────────────────────────────────────────
+
+      - name: Gate on severity threshold
+        if: "!inputs.fail-on-new-only"
+        run: |
+          EXIT=${{ steps.scan.outputs.scan-exit }}
+          THRESHOLD="${{ inputs.severity-threshold }}"
+          case "$THRESHOLD" in
+            Critical) FAIL_AT=3 ;;
+            High)     FAIL_AT=2 ;;
+            Medium)   FAIL_AT=1 ;;
+            Low)      FAIL_AT=1 ;;
+            *)        FAIL_AT=2 ;;  # default: High
+          esac
+          if [ "$EXIT" -ge "$FAIL_AT" ]; then
+            echo "::error::veil scan found findings at or above ${THRESHOLD} severity (exit code ${EXIT})"
+            exit 1
+          fi
+
+      # ── Summary ─────────────────────────────────────────────────────────────
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## Veil Security Scan" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ -f veil-results.json ]; then
+            COUNT=$(python3 -c "import json,sys; d=json.load(open('veil-results.json')); print(len(d.get('findings',[])))")
+            echo "**${COUNT} finding(s)** found in \`${{ inputs.path }}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "See the Security tab for annotated results (SARIF upload required)." >> "$GITHUB_STEP_SUMMARY"
+          fi

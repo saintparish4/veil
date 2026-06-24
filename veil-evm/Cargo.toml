@@ -1,0 +1,16 @@
+[package]
+name = "veil-evm"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "EVM bytecode frontend for veil — disassembly, CFG, and source-map correlation"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+insta.workspace = true

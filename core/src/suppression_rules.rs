@@ -1,24 +1,33 @@
-//! TOML-based suppression rules for DeFi teams.
+//! TOML-based suppression and pattern rules for DeFi teams.
 //!
 //! Rules live in `.veil/rules/*.toml` relative to the project root.
-//! Each file may contain multiple `[[rules]]` entries. Rules are applied
-//! after inline `// veil-ignore:` suppression and after baseline filtering.
+//! Each file may contain multiple `[[rules]]` entries — either suppression rules
+//! or pattern rules. Rules are applied after inline `// veil-ignore:` suppression
+//! and after baseline filtering.
 //!
 //! Example rule file (`.veil/rules/defi.toml`):
 //! ```toml
+//! # Suppression rule — silence a known detector for a specific pattern
 //! [[rules]]
 //! detector = "reentrancy"
 //! if_function_name_contains = "Callback"
 //! reason = "Uniswap/Aave callbacks are invoked by verified pool contracts"
 //!
+//! # Pattern rule — emit a custom finding when a predicate matches
 //! [[rules]]
-//! detector = "flash-loan"
-//! if_file = "src/receivers/"
-//! reason = "All files in receivers/ are trusted flash-loan receivers"
+//! id = "custom-timelock"
+//! severity = "High"
+//! pattern = "function_name_contains('schedule') AND NOT has_modifier('onlyProposer')"
+//! message = "Timelock schedule function missing proposer access control"
 //! ```
+//!
+//! Rule type is inferred from the presence of required fields:
+//! - Suppression rules require `detector` + `reason`.
+//! - Pattern rules require `id` + `pattern` + `message`.
 //!
 //! All string comparisons are case-insensitive.
 
+use crate::rule_engine::PatternRule;
 use crate::types::Finding;
 use serde::Deserialize;
 use std::{fs, path::Path};
@@ -50,28 +59,46 @@ pub struct SuppressionRule {
     pub reason: String,
 }
 
+/// A single TOML `[[rules]]` entry — either a suppression rule or a pattern rule.
+///
+/// Discriminated by required fields: suppression rules have `detector`+`reason`;
+/// pattern rules have `id`+`pattern`+`message`. Serde tries each variant in order.
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum RuleEntry {
+    Pattern(PatternRule),
+    Suppress(SuppressionRule),
+}
+
 /// Container that deserializes a `.toml` file with `[[rules]]` sections.
 #[derive(Debug, Deserialize)]
 struct RuleFile {
     #[serde(default)]
-    rules: Vec<SuppressionRule>,
+    rules: Vec<RuleEntry>,
+}
+
+/// Both types of rules loaded from a single `.veil/rules/` directory scan.
+#[derive(Debug, Default)]
+pub struct LoadedRules {
+    pub suppression: Vec<SuppressionRule>,
+    pub patterns: Vec<PatternRule>,
 }
 
 // ---------------------------------------------------------------------------
 // Loading
 // ---------------------------------------------------------------------------
 
-/// Load all `*.toml` files from `rules_dir` and collect their `[[rules]]` entries.
+/// Load all `*.toml` files from `rules_dir` and return both suppression and pattern rules.
 ///
-/// Non-existent directories return an empty vec (not an error — project may not
+/// Non-existent directories return an empty `LoadedRules` (not an error — project may not
 /// have any rules yet).  Malformed TOML files emit a warning to stderr and are
 /// skipped so that a single bad file does not break the whole scan.
-pub fn load_rules_from_dir(rules_dir: &Path) -> Vec<SuppressionRule> {
+pub fn load_rules_from_dir(rules_dir: &Path) -> LoadedRules {
     if !rules_dir.exists() {
-        return Vec::new();
+        return LoadedRules::default();
     }
 
-    let mut all_rules = Vec::new();
+    let mut loaded = LoadedRules::default();
 
     let entries = match fs::read_dir(rules_dir) {
         Ok(e) => e,
@@ -81,7 +108,7 @@ pub fn load_rules_from_dir(rules_dir: &Path) -> Vec<SuppressionRule> {
                 rules_dir.display(),
                 err
             );
-            return Vec::new();
+            return LoadedRules::default();
         }
     };
 
@@ -102,7 +129,14 @@ pub fn load_rules_from_dir(rules_dir: &Path) -> Vec<SuppressionRule> {
             }
         };
         match toml::from_str::<RuleFile>(&content) {
-            Ok(rf) => all_rules.extend(rf.rules),
+            Ok(rf) => {
+                for entry in rf.rules {
+                    match entry {
+                        RuleEntry::Pattern(p) => loaded.patterns.push(p),
+                        RuleEntry::Suppress(s) => loaded.suppression.push(s),
+                    }
+                }
+            }
             Err(err) => {
                 eprintln!(
                     "veil: warning: invalid TOML in '{}': {}",
@@ -113,11 +147,11 @@ pub fn load_rules_from_dir(rules_dir: &Path) -> Vec<SuppressionRule> {
         }
     }
 
-    all_rules
+    loaded
 }
 
 /// Convenience: load rules from the default location (`.veil/rules/` relative to `scan_root`).
-pub fn load_project_rules(scan_root: &str) -> Vec<SuppressionRule> {
+pub fn load_project_rules(scan_root: &str) -> LoadedRules {
     let dir = Path::new(scan_root).join(".veil").join("rules");
     load_rules_from_dir(&dir)
 }
@@ -305,12 +339,37 @@ reason = "Skip test files"
 "#;
         let rf: RuleFile = toml::from_str(toml_src).expect("parse");
         assert_eq!(rf.rules.len(), 2);
-        assert_eq!(rf.rules[0].detector, "reentrancy");
-        assert_eq!(
-            rf.rules[0].if_function_name_contains.as_deref(),
-            Some("Callback")
-        );
-        assert_eq!(rf.rules[1].detector, "*");
-        assert_eq!(rf.rules[1].if_file.as_deref(), Some("test/"));
+        let r0 = match &rf.rules[0] {
+            RuleEntry::Suppress(r) => r,
+            _ => panic!("expected suppression rule"),
+        };
+        assert_eq!(r0.detector, "reentrancy");
+        assert_eq!(r0.if_function_name_contains.as_deref(), Some("Callback"));
+        let r1 = match &rf.rules[1] {
+            RuleEntry::Suppress(r) => r,
+            _ => panic!("expected suppression rule"),
+        };
+        assert_eq!(r1.detector, "*");
+        assert_eq!(r1.if_file.as_deref(), Some("test/"));
+    }
+
+    #[test]
+    fn toml_pattern_rule_round_trip() {
+        let toml_src = r#"
+[[rules]]
+id = "custom-no-guard"
+severity = "High"
+pattern = "function_name_contains('schedule') AND NOT has_modifier('onlyProposer')"
+message = "Missing access control"
+"#;
+        let rf: RuleFile = toml::from_str(toml_src).expect("parse");
+        assert_eq!(rf.rules.len(), 1);
+        let pr = match &rf.rules[0] {
+            RuleEntry::Pattern(p) => p,
+            _ => panic!("expected pattern rule"),
+        };
+        assert_eq!(pr.id, "custom-no-guard");
+        assert_eq!(pr.severity, "High");
+        assert!(pr.pattern.contains("schedule"));
     }
 }

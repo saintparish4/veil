@@ -12,6 +12,8 @@
 use crate::ast_utils::find_nodes_of_kind;
 use crate::cfg::ControlFlowGraph;
 use crate::defi_patterns::{classify_contract_role, ContractRole};
+use crate::interprocedural::{build_summaries, FunctionSummary};
+use crate::storage_model::{build_storage_model, StorageModel};
 use crate::types::{Confidence, Finding, Severity};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -39,6 +41,11 @@ pub struct AnalysisContext<'a> {
     /// Dominant protocol role of the contract(s) in this file, computed once in `::new`.
     /// Detectors use this to adjust confidence or skip irrelevant checks.
     pub contract_role: ContractRole,
+    /// Inter-procedural summaries for all functions in the file, built once in `::new`.
+    /// Detectors can query `ctx.summaries.get("funcName")` to check transitive properties.
+    pub summaries: HashMap<String, FunctionSummary>,
+    /// Lazy storage layout model. Call `ctx.storage_model()` to access; built on first call.
+    storage_model: RefCell<Option<StorageModel>>,
     /// Lazy CFG cache keyed by function byte offset; only functions that request
     /// a CFG get one built and cached.
     cfgs: RefCell<HashMap<usize, ControlFlowGraph>>,
@@ -53,14 +60,34 @@ impl<'a> AnalysisContext<'a> {
         let root = tree.root_node();
         let functions = find_nodes_of_kind(&root, "function_definition");
         let contract_role = classify_contract_role(&root, source);
-        Self {
+        // Build summaries after populating `functions` so `build_summaries` can iterate them.
+        let mut ctx = Self {
             tree,
             source,
             file_path: None,
             functions,
             contract_role,
+            summaries: HashMap::new(),
+            storage_model: RefCell::new(None),
             cfgs: RefCell::new(HashMap::new()),
+        };
+        ctx.summaries = build_summaries(&ctx);
+        ctx
+    }
+
+    /// Returns a reference to the contract's storage layout model, building it on first call.
+    ///
+    /// The model is built lazily so files with no storage variables (interfaces, libraries)
+    /// pay no cost. Detectors that don't call this pay zero overhead.
+    pub fn storage_model(&self) -> std::cell::Ref<'_, StorageModel> {
+        if self.storage_model.borrow().is_none() {
+            let model = build_storage_model(&self.tree.root_node(), self.source);
+            *self.storage_model.borrow_mut() = Some(model);
         }
+        std::cell::Ref::map(self.storage_model.borrow(), |opt| {
+            opt.as_ref()
+                .expect("storage model was just initialized above")
+        })
     }
 
     /// Returns a reference to the CFG for the given function, building and caching it on first use.

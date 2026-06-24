@@ -34,7 +34,7 @@ required-features = ["cli"]
 
 [features]
 default = ["cli"]
-cli = ["dep:colored", "dep:clap", "dep:tracing-subscriber"]
+cli = ["dep:colored", "dep:clap", "dep:tracing-subscriber", "dep:veil-evm"]
 
 [dependencies]
 tree-sitter = { workspace = true }
@@ -51,6 +51,7 @@ toml = { workspace = true }
 colored = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true }
+veil-evm = { path = "../veil-evm", optional = true }
 
 [dev-dependencies]
 insta = { workspace = true }
