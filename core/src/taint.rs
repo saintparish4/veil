@@ -46,7 +46,7 @@ fn line_of(stmt: &CfgStatement) -> usize {
         CfgStatement::ExternalCall { line, .. } => *line,
         CfgStatement::StateWrite { line, .. } => *line,
         CfgStatement::LocalAssignment { .. } => 0,
-        CfgStatement::Guard { byte_offset: _, .. } => 0,
+        CfgStatement::Guard { .. } => 0,
         CfgStatement::Emit { line, .. } => *line,
         CfgStatement::Return { .. } => 0,
         CfgStatement::Revert { .. } => 0,

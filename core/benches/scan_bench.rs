@@ -8,9 +8,8 @@
 //!
 //! Group 2 — `scan_corpus_throughput`: reports lines-per-second against
 //!   the fetched precision corpus under `benchmarks/vendor/precision/`.
-//!   Skipped (with a one-line notice) if that directory does not exist
-//!   yet — this keeps `cargo bench` green before Phase 3 lands the
-//!   fetch scripts.
+//!   Skipped (with a one-line notice) if that directory does not exist,
+//!   so `cargo bench` stays green on a repo that has not run `make fetch`.
 
 use std::fs;
 use std::hint::black_box;

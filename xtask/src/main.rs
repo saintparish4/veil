@@ -1,10 +1,9 @@
 //! `cargo xtask` — Veil benchmarking & release automation runner.
 //!
-//! Each subcommand maps 1:1 to a `just bench-*` target and writes a committed
-//! result artifact under `benchmarks/<area>/results/`. Sub-modules are
-//! intentionally minimal in Phase 1: they print a "not implemented yet"
-//! message so the workspace + dispatch compile today and every later phase
-//! only has to fill in a single file.
+//! Each subcommand maps 1:1 to a `make bench-*` target and writes a committed
+//! result artifact under `benchmarks/<area>/results/`. Dispatch is deliberately
+//! flat: one module per subcommand, so adding a suite means filling in a single
+//! file rather than touching the CLI.
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};

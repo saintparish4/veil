@@ -60,7 +60,7 @@ exclude     = [
 ]
 
 [[corpus]]
-# Curve was dropped from the Phase-3 corpus because curvefi/curve-contract
+# Curve was dropped from the corpus because curvefi/curve-contract
 # is a Vyper codebase (75 .vy, 0 .sol) and Veil's precision scanner is
 # Solidity-only. Balancer V2 fills the "AMM" slot with heavily-audited
 # Solidity: the `vault-deployment` tag pins the exact commit shipped to

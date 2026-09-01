@@ -6,8 +6,8 @@
 //! built once at startup and shared for the lifetime of the process.
 //!
 //! [`AnalysisContext`] is the read-only bundle passed to each [`Detector::run`] call.
-//! Phase S3 extends it with a lazy CFG cache; detectors that call [`AnalysisContext::cfg_for`]
-//! get a CFG per function on demand; others pay zero cost.
+//! It carries a lazy CFG cache: detectors that call [`AnalysisContext::cfg_for`] get a
+//! CFG per function on demand, and detectors that do not pay nothing for it.
 
 use crate::ast_utils::find_nodes_of_kind;
 use crate::cfg::ControlFlowGraph;

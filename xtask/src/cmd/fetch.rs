@@ -1,10 +1,11 @@
 //! `cargo xtask fetch` — routes to the platform-native fetch script,
 //! or emits TSV for the PowerShell / bash script to consume.
 //!
-//! Phase 4 note: `--corpus` now also accepts `recall`. Both families share
-//! the same `corpus.toml` schema (see `benchmarks/<family>/corpus.toml`).
-//! The emitted TSV gained a leading `family` column so the shell scripts
-//! can route clones into `benchmarks/vendor/<family>/<name>/`:
+//! `--corpus` accepts a family name (`precision`, `recall`) or `all`. Both
+//! families share the same `corpus.toml` schema (see
+//! `benchmarks/<family>/corpus.toml`). The emitted TSV leads with a `family`
+//! column so the shell scripts can route clones into
+//! `benchmarks/vendor/<family>/<name>/`:
 //!
 //!     family<TAB>name<TAB>url<TAB>rev
 
@@ -64,8 +65,7 @@ pub fn run(args: Args) -> Result<()> {
 
     // TSV mode: enumerate every corpus in the selected family (or all
     // families when `--corpus all`). Missing corpus.toml for a family is
-    // silently skipped so the recall corpus.toml is optional until Phase 4
-    // is wired end-to-end.
+    // silently skipped, so a family without a pinned corpus is not an error.
     if args.emit_tsv {
         for fam in selected_families(corpus_name) {
             let toml_path = root.join("benchmarks").join(fam).join("corpus.toml");
@@ -81,10 +81,7 @@ pub fn run(args: Args) -> Result<()> {
 
     let (program, script) = script_for_os(&root);
     if !script.exists() {
-        return Err(anyhow!(
-            "fetch script not found at {} — did Phase 3 STEP 5/6 land?",
-            script.display()
-        ));
+        return Err(anyhow!("fetch script not found at {}", script.display()));
     }
 
     println!(

@@ -35,3 +35,6 @@ perf.data.old
 /benchmarks/vendor/
 /target-llvm-cov/
 .claude
+
+# Internal design notes — kept local, not part of the published repo.
+/base/

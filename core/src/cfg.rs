@@ -1046,7 +1046,7 @@ mod tests {
     use crate::scan::new_solidity_parser;
     use smallvec::smallvec;
 
-    /// Hand-built CFG matching the phase-s3 example format for Display snapshot.
+    /// Hand-built CFG covering every block kind, used to pin the `Display` snapshot.
     fn example_cfg() -> ControlFlowGraph {
         let entry = BasicBlockId(0);
         let exit = BasicBlockId(3);

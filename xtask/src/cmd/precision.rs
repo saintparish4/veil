@@ -24,7 +24,7 @@ pub struct Args {
     /// Only run for a single corpus name (matches `name` in corpus.toml).
     #[arg(long)]
     pub only: Option<String>,
-    /// Optional comparator (reserved; not implemented in Phase 3).
+    /// Optional comparator (reserved; not implemented yet).
     #[arg(long)]
     pub compare: Option<String>,
     /// Skip the implicit fetch when `benchmarks/vendor/precision` is empty.
