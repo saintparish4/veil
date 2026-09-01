@@ -1093,7 +1093,6 @@ checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 name = "veil"
 version = "0.1.0"
 dependencies = [
- "clap",
  "colored",
  "criterion",
  "insta",
@@ -1105,12 +1104,26 @@ dependencies = [
  "tempfile",
  "toml",
  "tracing",
- "tracing-subscriber",
  "tree-sitter",
  "tree-sitter-language",
  "tree-sitter-solidity",
- "veil-evm",
  "walkdir",
+]
+
+[[package]]
+name = "veil-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "colored",
+ "serde_json",
+ "tempfile",
+ "tracing",
+ "tracing-subscriber",
+ "tree-sitter",
+ "veil",
+ "veil-evm",
+ "veil-project",
 ]
 
 [[package]]

@@ -1,6 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["core", "xtask", "veil-plugin", "veil-evm", "veil-project"]
+members = ["core", "xtask", "veil-plugin", "veil-evm", "veil-project", "veil-cli"]
+# `xtask` also produces a binary, so a bare `cargo run` at the workspace root
+# cannot pick one without this. Point it at the CLI.
+default-members = ["veil-cli"]
 
 # Optimize the distributed binary: full LTO + a single codegen unit maximize
 # runtime speed (the scanner's headline is sub-10ms per file), and stripping

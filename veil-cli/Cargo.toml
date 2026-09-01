@@ -1,0 +1,43 @@
+[package]
+name = "veil-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Veil — command-line interface for the Solidity security engine."
+homepage = "https://github.com/saintparish4/veil"
+documentation = "https://github.com/saintparish4/veil"
+readme = "../README.md"
+keywords = ["solidity", "security", "scanner", "static-analysis", "ethereum"]
+categories = ["development-tools", "cryptography::cryptocurrencies"]
+
+# The binary keeps the name `veil`. This package exists because the CLI is the
+# only layer allowed to depend on everything: `veil-project` depends on `veil`,
+# so a binary living inside `veil` could never reach project resolution.
+[[bin]]
+name = "veil"
+path = "src/main.rs"
+
+# Lets `cargo binstall veil-cli` fetch the prebuilt release archives produced by
+# .github/workflows/release.yml instead of compiling from source. The asset
+# naming here must match the `archive: veil-$target` in that workflow.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/veil-{ target }.{ archive-format }"
+bin-dir = "{ bin }{ binary-ext }"
+
+[dependencies]
+veil = { path = "../core", features = ["cli"] }
+veil-project = { path = "../veil-project" }
+veil-evm = { path = "../veil-evm" }
+clap = { workspace = true }
+colored = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+# Only for naming `tree_sitter::Tree` in test helpers; the parser itself comes
+# from `veil::scan::new_solidity_parser`.
+tree-sitter = { workspace = true }

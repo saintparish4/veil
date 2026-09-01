@@ -33,7 +33,9 @@ pub use helpers::*;
 pub use output::{format_json, format_sarif};
 pub use project_facts::{ModifierFacts, ProjectFacts};
 pub use report::{HtmlReport, PdfReport, ReportConfig, ReportError, ReportGenerator};
-pub use scan::{calculate_statistics, scan_directory_with, scan_file_with};
+pub use scan::{
+    calculate_statistics, scan_directory_with, scan_file_with, scan_parsed_with_project,
+};
 pub use suppression::{
     filter_findings_by_baseline, filter_findings_by_inline_ignores, load_baseline,
     parse_veil_ignores, BaselineFile,

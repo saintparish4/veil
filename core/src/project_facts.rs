@@ -24,13 +24,13 @@ pub struct ModifierFacts {
     /// Contract that actually declares the body, which is often not the contract
     /// the modifier is used in.
     pub declaring_contract: String,
-    /// The body gates on caller identity — `msg.sender` compared against stored
-    /// state, a role check, or a call to an authority contract.
+    /// The modifier gates on caller identity — `msg.sender` compared against
+    /// stored state, a role check, or a delegated call that does one of those.
     ///
     /// This is the field that replaces the `starts_with("only")` guess.
     pub gates_on_caller: bool,
-    /// The body can abort the call at all (`require`, `revert`, or `if (…) revert`).
-    /// A modifier that cannot revert cannot be enforcing anything.
+    /// The modifier can abort the call at all — `require`, `revert`, or a
+    /// delegated check that does. A modifier that cannot revert enforces nothing.
     pub can_revert: bool,
 }
 

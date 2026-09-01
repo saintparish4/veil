@@ -62,6 +62,14 @@ pub struct SourceUnit {
     /// True when the file came from a dependency tree (`lib/`, `node_modules/`).
     /// I parse these so imports resolve, but I do not report findings in them.
     pub is_dependency: bool,
+    /// True for test and deployment-script files.
+    ///
+    /// Same treatment as dependencies, and for a stronger reason: a test contract
+    /// is *supposed* to have unguarded functions that move funds and change
+    /// owners. Reporting on them is not a false positive exactly — the code
+    /// really is unprotected — but it is noise no one can act on, and it drowns
+    /// the findings that matter.
+    pub is_test: bool,
 }
 
 impl SourceUnit {
@@ -69,6 +77,14 @@ impl SourceUnit {
     pub fn root(&self) -> Node<'_> {
         self.tree.root_node()
     }
+}
+
+/// Knobs for what gets reported. Resolution itself is unaffected: excluded files
+/// are still parsed, because a test helper can declare a base a source file uses.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct LoadOptions {
+    /// Report findings in test and script files too. Off by default.
+    pub include_tests: bool,
 }
 
 /// A single `from = to` line out of `remappings.txt` or `foundry.toml`.
@@ -173,6 +189,24 @@ fn display_path(root: &Path, abs: &Path) -> String {
 /// Directory names whose contents are dependencies rather than project code.
 const DEPENDENCY_DIRS: [&str; 3] = ["lib", "node_modules", "dependencies"];
 
+/// Directory names that hold tests or deployment scripts rather than protocol code.
+const TEST_DIRS: [&str; 4] = ["test", "tests", "script", "scripts"];
+
+/// Foundry names test contracts `Foo.t.sol` and scripts `Deploy.s.sol`, and both
+/// Foundry and Hardhat put them under a `test/` or `script/` directory. Checking
+/// both catches projects that follow only one of the two conventions.
+fn is_test_path(root: &Path, abs: &Path) -> bool {
+    let rel = abs.strip_prefix(root).unwrap_or(abs);
+    if rel
+        .components()
+        .any(|c| TEST_DIRS.contains(&c.as_os_str().to_string_lossy().as_ref()))
+    {
+        return true;
+    }
+    let name = abs.file_name().unwrap_or_default().to_string_lossy();
+    name.ends_with(".t.sol") || name.ends_with(".s.sol")
+}
+
 fn is_dependency_path(root: &Path, abs: &Path) -> bool {
     let rel = abs.strip_prefix(root).unwrap_or(abs);
     rel.components()
@@ -234,6 +268,7 @@ fn discover_sol_files(root: &Path) -> Vec<PathBuf> {
 /// The parsed files of a project and the import edges between them.
 pub struct SourceUnitGraph {
     pub root: PathBuf,
+    pub options: LoadOptions,
     pub layout: Layout,
     pub remappings: Vec<Remapping>,
     pub units: Vec<SourceUnit>,
@@ -248,6 +283,11 @@ impl SourceUnitGraph {
     /// produced — the grammar is error-tolerant, and a file with one bad function
     /// still has usable contract declarations.
     pub fn load(root: &Path) -> std::io::Result<Self> {
+        Self::load_with(root, LoadOptions::default())
+    }
+
+    /// As [`load`](Self::load), with control over what is reported.
+    pub fn load_with(root: &Path, options: LoadOptions) -> std::io::Result<Self> {
         let root = normalize(&std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf()));
         let layout = detect_layout(&root);
         let remappings = load_remappings(&root);
@@ -288,6 +328,7 @@ impl SourceUnitGraph {
                 id,
                 path: display_path(&root, &abs),
                 is_dependency: is_dependency_path(&root, &abs),
+                is_test: is_test_path(&root, &abs),
                 abs_path: abs,
                 source,
                 tree,
@@ -297,6 +338,7 @@ impl SourceUnitGraph {
 
         let mut graph = Self {
             root,
+            options,
             layout,
             remappings,
             units,
@@ -411,9 +453,13 @@ impl SourceUnitGraph {
         self.by_abs_path.get(abs).copied()
     }
 
-    /// Units that are project code rather than vendored dependencies.
+    /// Units I report findings in: project code, excluding vendored dependencies
+    /// and (unless asked otherwise) tests and scripts.
     pub fn project_units(&self) -> impl Iterator<Item = &SourceUnit> {
-        self.units.iter().filter(|u| !u.is_dependency)
+        let include_tests = self.options.include_tests;
+        self.units
+            .iter()
+            .filter(move |u| !u.is_dependency && (include_tests || !u.is_test))
     }
 
     /// Files reachable from `start` by following imports, including `start`.

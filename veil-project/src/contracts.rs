@@ -42,6 +42,8 @@ pub struct FunctionDecl {
     /// `_checkOwner` does.
     pub references_caller: bool,
     pub can_revert: bool,
+    /// Names called from the body, so delegation can be followed past this hop.
+    pub calls: Vec<String>,
     pub line: usize,
 }
 
@@ -57,9 +59,10 @@ pub struct ModifierDecl {
     /// The body can abort the call: `require`, `revert`, `assert`, or an `if`
     /// guarding a revert. A modifier that cannot revert enforces nothing.
     pub can_revert: bool,
-    /// Names called from the body, so I can follow one level of delegation.
-    /// OpenZeppelin 5.x writes `modifier onlyOwner() { _checkOwner(); _; }`, and
-    /// missing that would make this analysis useless on most real code.
+    /// Names called from the body, so delegation can be followed. Real guards
+    /// rarely do the check inline: OpenZeppelin writes
+    /// `modifier onlyOwner() { _checkOwner(); _; }`, and `onlyRole` is two hops
+    /// deeper still.
     pub calls: Vec<String>,
     pub line: usize,
 }
@@ -457,6 +460,10 @@ fn collect_functions(contract_node: &Node, source: &str) -> Vec<FunctionDecl> {
                 has_body: body.is_some(),
                 references_caller: body.as_ref().is_some_and(|b| references_caller(b, source)),
                 can_revert: body.as_ref().is_some_and(|b| can_revert(b, source)),
+                calls: body
+                    .as_ref()
+                    .map(|b| call_names(b, source))
+                    .unwrap_or_default(),
                 line: node.start_position().row + 1,
             })
         })

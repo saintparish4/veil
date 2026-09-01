@@ -14,10 +14,19 @@
 //! Rows three through five are the false positives and false negatives the name
 //! check produces today, and they are exactly the modifiers real protocols use.
 
+use std::collections::BTreeSet;
+
 use veil::project_facts::{ModifierFacts, ProjectFacts};
 
-use crate::contracts::{Contract, ContractGraph, ContractId};
-use crate::resolve::{Diagnostic, SourceUnitGraph};
+use crate::contracts::{Contract, ContractGraph, ContractId, ModifierDecl};
+
+/// How far to follow a modifier's internal calls looking for a caller check.
+///
+/// Three covers every pattern I have found in production: OpenZeppelin's
+/// `onlyRole` needs two hops, `AccessManaged.restricted` needs one, and a direct
+/// `require(msg.sender == owner)` needs none.
+const MAX_DELEGATION_DEPTH: usize = 3;
+use crate::resolve::{Diagnostic, LoadOptions, SourceUnitGraph};
 
 /// A resolved project: the files, and the contract graph built over them.
 pub struct Project {
@@ -28,7 +37,15 @@ pub struct Project {
 impl Project {
     /// Parse and resolve every `.sol` file under `root`.
     pub fn load(root: impl AsRef<std::path::Path>) -> std::io::Result<Self> {
-        let sources = SourceUnitGraph::load(root.as_ref())?;
+        Self::load_with(root, LoadOptions::default())
+    }
+
+    /// As [`load`](Self::load), with control over what is reported.
+    pub fn load_with(
+        root: impl AsRef<std::path::Path>,
+        options: LoadOptions,
+    ) -> std::io::Result<Self> {
+        let sources = SourceUnitGraph::load_with(root.as_ref(), options)?;
         let contracts = ContractGraph::build(&sources);
         Ok(Self { sources, contracts })
     }
@@ -47,21 +64,65 @@ impl Project {
         self.contracts.unique_by_name(name)
     }
 
-    /// Does the function named `name`, searched through `linearization`, check the
-    /// caller and revert?
+    /// What a modifier can do, following its internal calls.
     ///
-    /// This is the one level of delegation I follow. OpenZeppelin 5.x writes
-    /// `modifier onlyOwner() { _checkOwner(); _; }`, so stopping at the modifier
-    /// body would report the single most common access-control pattern in the
-    /// ecosystem as uncontrolled. I deliberately do not recurse further: two-level
-    /// delegation is rare, and an unbounded walk here would need cycle handling
-    /// for no real gain.
-    fn callee_gates_on_caller(&self, linearization: &[ContractId], name: &str) -> bool {
-        linearization
-            .iter()
-            .filter_map(|id| self.contracts.get(*id))
-            .flat_map(|c| c.functions.iter())
-            .any(|f| f.name == name && f.references_caller && f.can_revert)
+    /// Returns `(reads the caller, can revert)` over the modifier body plus
+    /// everything reachable from it. Both have to be transitive, because real
+    /// guards almost never do the work inline.
+    ///
+    /// The naive version asks whether one body both reads the caller and reverts.
+    /// OpenZeppelin's `onlyRole` is the counterexample that proves it wrong:
+    ///
+    /// ```text
+    /// modifier onlyRole(bytes32 role) { _checkRole(role); _; }
+    /// function _checkRole(bytes32 role)                  { _checkRole(role, _msgSender()); }
+    /// function _checkRole(bytes32 role, address account) { if (!hasRole(...)) revert ...; }
+    /// ```
+    ///
+    /// The caller read is one hop down and the revert is two, so no single body
+    /// has both, and the naive check calls the most widely deployed role guard in
+    /// Solidity "not access control" — a false positive on every `onlyRole`
+    /// guarded sensitive function.
+    ///
+    /// This is deliberately loose: I do not prove the caller value flows into the
+    /// revert condition. Loose here errs toward silence, which is the right
+    /// direction, because the failure mode of being strict is inventing
+    /// missing-access-control findings on correctly guarded code.
+    ///
+    /// Bounded at [`MAX_DELEGATION_DEPTH`] with a visited set, so a long chain
+    /// costs little and mutual recursion terminates.
+    fn reachable_facts(&self, linearization: &[ContractId], decl: &ModifierDecl) -> (bool, bool) {
+        let mut saw_caller = decl.references_caller;
+        let mut saw_revert = decl.can_revert;
+        let mut visited: BTreeSet<String> = BTreeSet::new();
+        let mut frontier: Vec<String> = decl.calls.clone();
+
+        for _ in 0..MAX_DELEGATION_DEPTH {
+            if saw_caller && saw_revert {
+                break;
+            }
+            let mut next = Vec::new();
+            for name in std::mem::take(&mut frontier) {
+                if !visited.insert(name.clone()) {
+                    continue;
+                }
+                // Every overload of the name, since declarations are keyed by name
+                // alone — and for `_checkRole` the two overloads are exactly where
+                // the caller read and the revert live.
+                for f in linearization
+                    .iter()
+                    .filter_map(|id| self.contracts.get(*id))
+                    .flat_map(|c| c.functions.iter())
+                    .filter(|f| f.name == name)
+                {
+                    saw_caller |= f.references_caller;
+                    saw_revert |= f.can_revert;
+                    next.extend(f.calls.iter().cloned());
+                }
+            }
+            frontier = next;
+        }
+        (saw_caller, saw_revert)
     }
 }
 
@@ -78,18 +139,12 @@ impl ProjectFacts for Project {
                 continue;
             };
 
-            let direct = decl.references_caller && decl.can_revert;
-            let delegated = !direct
-                && decl
-                    .calls
-                    .iter()
-                    .any(|callee| self.callee_gates_on_caller(&start.linearization, callee));
-
+            let (reads_caller, can_revert) = self.reachable_facts(&start.linearization, decl);
             return Some(ModifierFacts {
                 name: decl.name.clone(),
                 declaring_contract: current.name.clone(),
-                gates_on_caller: direct || delegated,
-                can_revert: decl.can_revert,
+                gates_on_caller: reads_caller && can_revert,
+                can_revert,
             });
         }
         None

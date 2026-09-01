@@ -1,3 +1,5 @@
+mod analyze;
+
 use clap::{Parser, Subcommand};
 use colored::*;
 use std::path::Path;
@@ -48,6 +50,40 @@ enum Commands {
         /// Suppress application of TOML rules from `.veil/rules/` (load them but skip).
         #[arg(long)]
         no_rules: bool,
+    },
+    /// Analyse a whole project: resolve imports and inheritance, then run every
+    /// detector with those cross-file facts attached.
+    ///
+    /// Unlike `scan`, this resolves modifiers to the base contract that declares
+    /// them, so `onlyOwner` is judged by what it does rather than what it is called.
+    ///
+    /// Examples:
+    ///   veil analyze ./contracts
+    ///   veil analyze ./contracts --compare
+    ///   veil analyze ./contracts --format sarif > results.sarif
+    Analyze {
+        /// Project directory (a Foundry, Hardhat, or plain Solidity tree).
+        path: String,
+        #[arg(short, long, default_value = "terminal")]
+        format: String,
+        /// Also run per-file mode and report which findings resolution changed.
+        #[arg(long)]
+        compare: bool,
+        /// List every unresolved import and base contract.
+        #[arg(long = "show-diagnostics")]
+        show_diagnostics: bool,
+        #[arg(long)]
+        baseline: Option<String>,
+        /// Suppress application of TOML rules from `.veil/rules/` (load them but skip).
+        #[arg(long)]
+        no_rules: bool,
+        /// Also report findings in test and script files, which are excluded by default.
+        #[arg(long = "include-tests")]
+        include_tests: bool,
+        /// List every modifier and whether it gates on the caller. Use this to
+        /// audit the access-control analysis on an unfamiliar codebase.
+        #[arg(long = "explain-access-control")]
+        explain_access_control: bool,
     },
     /// Analyse EVM bytecode for vulnerabilities invisible at the Solidity AST level.
     ///
@@ -337,6 +373,28 @@ fn main() {
             std::process::exit(exit_code_for_stats(&stats));
         }
 
+        Commands::Analyze {
+            path,
+            format,
+            compare,
+            show_diagnostics,
+            baseline,
+            no_rules,
+            include_tests,
+            explain_access_control,
+        } => {
+            std::process::exit(analyze::run(analyze::Args {
+                path,
+                format,
+                compare,
+                show_diagnostics,
+                no_rules,
+                baseline,
+                include_tests,
+                explain_access_control,
+            }));
+        }
+
         Commands::Evm {
             bytecode,
             sourcemap,
@@ -439,10 +497,9 @@ mod tests {
     use veil::*;
 
     fn parse_solidity(source: &str) -> tree_sitter::Tree {
-        let mut parser = tree_sitter::Parser::new();
-        parser
-            .set_language(&tree_sitter_solidity::LANGUAGE.into())
-            .expect("Solidity language");
+        // Goes through the library's constructor rather than wiring the grammar
+        // again here, so the tests parse exactly what the scanner parses.
+        let mut parser = new_solidity_parser().expect("Solidity grammar");
         parser.parse(source, None).expect("parse")
     }
 
@@ -1004,23 +1061,19 @@ contract C is Initializable, Upgradeable {
 
     #[test]
     fn integration_scan_comprehensive_vulnerabilities() {
-        // When run via `cargo test` from the workspace root the cwd is the workspace root;
-        // when run directly from the crate directory the cwd is the crate root.
-        let path = "core/src/contracts/comprehensive-vulnerabilities.sol";
-        let path_alt = "src/contracts/comprehensive-vulnerabilities.sol";
-        let path_used = if std::path::Path::new(path).exists() {
-            path
-        } else if std::path::Path::new(path_alt).exists() {
-            path_alt
-        } else {
-            panic!(
-                "comprehensive-vulnerabilities.sol not found; tried '{}' and '{}'",
-                path, path_alt
-            )
-        };
+        // Anchored to the crate directory rather than the working directory, which
+        // varies with how `cargo test` was invoked.
+        let path_used = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../core/src/contracts/comprehensive-vulnerabilities.sol");
+        assert!(
+            path_used.exists(),
+            "fixture missing: {}",
+            path_used.display()
+        );
         let registry = build_registry();
         let mut parser = new_solidity_parser().expect("parser");
-        let outcome = scan_file_with(path_used, &registry, &mut parser);
+        let path_used = path_used.to_string_lossy().into_owned();
+        let outcome = scan_file_with(&path_used, &registry, &mut parser);
         assert!(
             outcome.errors.is_empty(),
             "scan should succeed without errors"

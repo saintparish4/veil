@@ -40,5 +40,5 @@ pub use contracts::{
 };
 pub use facts::Project;
 pub use resolve::{
-    Diagnostic, Import, Layout, Remapping, SourceUnit, SourceUnitGraph, SourceUnitId,
+    Diagnostic, Import, Layout, LoadOptions, Remapping, SourceUnit, SourceUnitGraph, SourceUnitId,
 };

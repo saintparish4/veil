@@ -11,30 +11,16 @@ documentation = "https://github.com/saintparish4/veil"
 readme = "../README.md"
 keywords = ["solidity", "security", "scanner", "static-analysis", "ethereum"]
 categories = ["development-tools", "cryptography::cryptocurrencies"]
-# Make `cargo run -p veil` and `cargo install` resolve to the scanner
-# without an explicit --bin.
-default-run = "veil"
-
-# Lets `cargo binstall veil` fetch the prebuilt release archives produced by
-# .github/workflows/release.yml instead of compiling from source. The asset
-# naming here must match the `archive: veil-$target` in that workflow.
-[package.metadata.binstall]
-pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.{ archive-format }"
-bin-dir = "{ bin }{ binary-ext }"
-
 [lib]
 name = "veil"
 path = "src/lib.rs"
 crate-type = ["lib"]
 
-[[bin]]
-name = "veil"
-path = "src/main.rs"
-required-features = ["cli"]
-
 [features]
 default = ["cli"]
-cli = ["dep:colored", "dep:clap", "dep:tracing-subscriber", "dep:veil-evm"]
+# Terminal rendering only. The CLI itself lives in the `veil-cli` package,
+# which is the one layer permitted to depend on every crate in the workspace.
+cli = ["dep:colored"]
 
 [dependencies]
 tree-sitter = { workspace = true }
@@ -49,9 +35,6 @@ sha2 = { workspace = true }
 rayon = { workspace = true }
 toml = { workspace = true }
 colored = { workspace = true, optional = true }
-clap = { workspace = true, optional = true }
-tracing-subscriber = { workspace = true, optional = true }
-veil-evm = { path = "../veil-evm", optional = true }
 
 [dev-dependencies]
 insta = { workspace = true }

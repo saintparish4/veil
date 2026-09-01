@@ -43,7 +43,28 @@ fn scan_parsed(
     registry: &DetectorRegistry,
     pattern_rules: &[PatternRule],
 ) -> Vec<Finding> {
+    scan_parsed_with_project(file_path, source, tree, registry, pattern_rules, None)
+}
+
+/// Run every detector over an already-parsed file, optionally with cross-file facts.
+///
+/// Project mode parses each file once into an arena and then analyses it, so it
+/// must not go back through [`scan_file_with_patterns`] — that would read and
+/// parse the file a second time. This is the seam both modes share: pass `None`
+/// for `project` and the behaviour is identical to a per-file scan.
+pub fn scan_parsed_with_project(
+    file_path: &str,
+    source: &str,
+    tree: &tree_sitter::Tree,
+    registry: &DetectorRegistry,
+    pattern_rules: &[PatternRule],
+    project: Option<&dyn crate::project_facts::ProjectFacts>,
+) -> Vec<Finding> {
     let ctx = AnalysisContext::new(tree, source).with_file_path(file_path);
+    let ctx = match project {
+        Some(p) => ctx.with_project(p),
+        None => ctx,
+    };
     let mut findings = Vec::new();
 
     // Built-in detectors

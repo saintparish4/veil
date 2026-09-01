@@ -248,3 +248,136 @@ fn unknown_contract_yields_no_opinion() {
     assert!(p.resolve_modifier("NotAContract", "onlyOwner").is_none());
     assert_eq!(p.is_access_controlled("NotAContract", "f"), None);
 }
+
+#[test]
+fn openzeppelin_only_role_two_hop_delegation_is_followed() {
+    // Found by running against OpenZeppelin v5.0.2, where the naive one-body rule
+    // called `onlyRole` "not access control". The caller read and the revert live
+    // in different functions, one hop apart:
+    //   onlyRole -> _checkRole(role) -> _checkRole(role, _msgSender())
+    let (_dir, p) = project(&[(
+        "src/AccessControl.sol",
+        r#"contract AccessControl {
+            mapping(bytes32 => mapping(address => bool)) private _roles;
+            function hasRole(bytes32 role, address account) public view returns (bool) {
+                return _roles[role][account];
+            }
+            function _checkRole(bytes32 role) internal view {
+                _checkRole(role, _msgSender());
+            }
+            function _checkRole(bytes32 role, address account) internal view {
+                if (!hasRole(role, account)) {
+                    revert AccessControlUnauthorizedAccount(account, role);
+                }
+            }
+            function _msgSender() internal view returns (address) { return msg.sender; }
+            modifier onlyRole(bytes32 role) { _checkRole(role); _; }
+        }
+        contract Vault is AccessControl {
+            function upgradeTo(address impl) external onlyRole(0x00) {}
+        }"#,
+    )]);
+
+    let facts = p
+        .resolve_modifier("Vault", "onlyRole")
+        .expect("onlyRole resolves");
+    assert!(
+        facts.gates_on_caller,
+        "onlyRole is the most widely deployed role guard in Solidity; calling it \
+         uncontrolled would false-positive on every protocol that uses AccessControl"
+    );
+    assert_eq!(p.is_access_controlled("Vault", "upgradeTo"), Some(true));
+}
+
+#[test]
+fn access_managed_restricted_delegation_is_followed() {
+    // OpenZeppelin 5's AccessManaged: the caller read is in the modifier, the
+    // revert is one hop down. The mirror image of the onlyRole shape.
+    let (_dir, p) = project(&[(
+        "src/Managed.sol",
+        r#"contract AccessManaged {
+            modifier restricted() { _checkCanCall(msg.sender, msg.sig); _; }
+            function _checkCanCall(address caller, bytes4 selector) internal view {
+                if (!canCall(caller, selector)) revert AccessManagedUnauthorized(caller);
+            }
+            function canCall(address a, bytes4 s) public view returns (bool) { return false; }
+        }
+        contract Target is AccessManaged {
+            function admin() external restricted {}
+        }"#,
+    )]);
+
+    assert!(
+        p.resolve_modifier("Target", "restricted")
+            .expect("resolves")
+            .gates_on_caller
+    );
+}
+
+#[test]
+fn reentrancy_and_pause_guards_are_still_not_access_control() {
+    // The transitive walk must not become so permissive that it accepts anything
+    // that reverts somewhere. These three all delegate, and none check the caller.
+    let (_dir, p) = project(&[(
+        "src/Guards.sol",
+        r#"contract Guards {
+            uint256 private _status;
+            bool private _paused;
+            modifier nonReentrant() { _nonReentrantBefore(); _; }
+            function _nonReentrantBefore() private {
+                if (_status == 2) revert ReentrancyGuardReentrantCall();
+                _status = 2;
+            }
+            modifier whenNotPaused() { _requireNotPaused(); _; }
+            function _requireNotPaused() internal view {
+                if (_paused) revert EnforcedPause();
+            }
+            modifier initializer() { _checkInitializing(); _; }
+            function _checkInitializing() internal view {
+                if (_initialized) revert InvalidInitialization();
+            }
+            bool private _initialized;
+        }"#,
+    )]);
+
+    for name in ["nonReentrant", "whenNotPaused", "initializer"] {
+        let facts = p.resolve_modifier("Guards", name).expect("resolves");
+        assert!(
+            !facts.gates_on_caller,
+            "`{name}` reverts, but not based on who called it"
+        );
+        assert!(facts.can_revert);
+    }
+}
+
+#[test]
+fn delegation_depth_is_bounded() {
+    // A chain longer than the cap, plus mutual recursion, must terminate and not
+    // silently claim a guard exists.
+    let (_dir, p) = project(&[(
+        "src/Deep.sol",
+        r#"contract Deep {
+            modifier guard() { a(); _; }
+            function a() internal view { b(); }
+            function b() internal view { c(); }
+            function c() internal view { d(); }
+            function d() internal view { if (msg.sender == address(0)) revert(); }
+            modifier loop() { x(); _; }
+            function x() internal view { y(); }
+            function y() internal view { x(); }
+        }"#,
+    )]);
+
+    // Terminating at all is the assertion that matters for `loop`.
+    assert!(
+        !p.resolve_modifier("Deep", "loop")
+            .expect("resolves")
+            .gates_on_caller
+    );
+    // `d` sits four hops from the modifier body, past the cap.
+    assert!(
+        !p.resolve_modifier("Deep", "guard")
+            .expect("resolves")
+            .gates_on_caller
+    );
+}

@@ -81,7 +81,7 @@ jobs:
 
       - name: Cargo build (source install)
         if: inputs.veil-version == ''
-        run: cargo install --path core --locked
+        run: cargo install --path veil-cli --locked
 
       # ── Scan ───────────────────────────────────────────────────────────────
 
