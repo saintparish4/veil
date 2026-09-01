@@ -1,8 +1,23 @@
-# Veil [UNDER CONSTRUCTION]
+# Veil
 
 **Accurate smart contract security analysis for modern DeFi.**
 
+[![CI](https://github.com/saintparish4/veil/actions/workflows/ci.yml/badge.svg)](https://github.com/saintparish4/veil/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Rust 1.75+](https://img.shields.io/badge/rust-1.75%2B-orange.svg)](https://rustup.rs)
+
 Veil is a static analysis scanner for Solidity smart contracts that solves the false-positive problem plaguing traditional security tools. Most scanners flag legitimate DeFi patterns — user withdrawals, staking claims, reward distributions — as vulnerabilities, burying real issues under noise. Veil understands modern smart contract architecture and delivers precise, actionable findings.
+
+### At a glance
+
+- Flags the root-cause vulnerability in **12 of 14 reconstructed historical hacks** — **$1.63B of $1.84B** in losses — each rebuilt from the verified on-chain source at the exploit block, with per-line ground truth. [See the breakdown ↓](#historical-exploits)
+- **~4.0 ms median** per contract (p99 **< 10 ms**), measured through the same entry point the binary uses. [Methodology ↓](#performance)
+- Measured against **526 files (~20.4k LOC)** across **eight audited production-DeFi repositories**, each pinned to an immutable commit SHA. [Corpus ↓](#precision)
+- **Project mode** (`veil analyze`) resolves imports and inheritance across a whole protocol, then judges a modifier by what its body *does* rather than what it is *named*. Resolves OpenZeppelin v5.0.2 (217 files, 409 imports) and Aave v3 (96 files, 410 imports) with **zero unresolved imports**, in under 0.6 s. [Project mode ↓](#project-mode)
+- **13 source-level detectors** mapped to the OWASP Smart Contract Top 10, plus **2 EVM bytecode detectors** for bugs that never appear in source.
+- Every benchmark artifact is **byte-deterministic** and committed to the repo — the exploit bench fetches and compiles nothing at runtime.
+
+> **Status: alpha (`v0.1.0`).** Detectors, benchmarks, and output formats are covered by CI on every push — `rustfmt`, `clippy -D warnings`, and the full test suite across stable, beta, and nightly. Precision triage across the production corpus is in progress and the aggregate percentage is not yet published; see [Precision](#precision) for exactly what is and isn't measured. The public API may change before `v1.0`.
 
 ---
 
@@ -16,12 +31,14 @@ Veil is built differently:
 - **Visibility-aware severity** — reentrancy risk in a `private` helper is fundamentally different from risk in an `external` function. Veil adjusts severity accordingly.
 - **CFG-based analysis** — reentrancy and unchecked-call detectors use a real control flow graph rather than heuristic line ordering. State writes that provably precede external calls do not trigger.
 - **AST-only detection** — no string matching on raw source text. Every detector operates on the tree-sitter parse tree, eliminating spurious matches inside comments, string literals, and multi-line expressions.
+- **Cross-file resolution** — `onlyOwner` is almost never declared in the file that uses it. In project mode Veil resolves a modifier through the inheritance chain to its body and reads what it actually checks, so `auth` and `requiresAuth` are recognised as access control while `initializer`, `nonReentrant`, and `whenNotPaused` are not. A name-based check gets both directions wrong.
 
 ---
 
 ## Features
 
 - 13 source-level vulnerability detectors covering the OWASP Smart Contract Top 10
+- Project mode (`veil analyze`) — import resolution, C3 inheritance linearization, and modifier-body resolution across a whole protocol
 - Control flow graph (CFG) with taint propagation for reentrancy analysis
 - Inter-procedural function summaries (intra-file storage-write and external-call propagation)
 - EVM bytecode frontend (`veil evm`) — disassembly, EVM CFG, and source-map correlation for bugs invisible at the AST level
@@ -35,6 +52,160 @@ Veil is built differently:
 - Reusable GitHub Action (`veil-scan.yml`) for one-line CI gating
 - Exit codes designed for CI gating (0 = clean, 1 = medium/low, 2 = high, 3 = critical)
 - Recursive directory scanning
+- Test and deployment-script files excluded from reporting by default, parsed only for resolution
+
+---
+
+## Historical exploits
+
+Veil flags the root-cause vulnerability in **12 of 14 reconstructed historical hacks** totalling **$1.63B of $1.84B** in losses (**88.5% coverage**). Each incident is a faithful minimum reconstruction from the verified on-chain source at the exploit block — not an SWC-style synthetic snippet — with ground truth pinned per-line in `expected.json` and a line-tolerance of ±2. Full headline in [`benchmarks/exploits/results/summary.md`](benchmarks/exploits/results/summary.md).
+
+- **CAUGHT**: The DAO (2016, $60M) — reentrancy at line 24
+- **CAUGHT**: King of the Ether Throne (2016, ~98 ETH silently dropped) — unchecked-calls at line 28
+- **CAUGHT**: GovernMental Ponzi (2016, ~1,100 ETH stuck) — timestamp-dependence at line 26
+- **MISSED (intended)**: Parity Multisig v1 (2017, $30M / 150k ETH) — detector roadmap
+- **CAUGHT**: Parity Multisig v2 (2017, $150M / 513k ETH frozen) — access-control at line 21
+- **CAUGHT**: SmartBillions Lottery (2017, ~$120k / 400 ETH) — unsafe-random at line 27
+- **CAUGHT**: BEC Token batchOverflow (2018, ~$70M paper) — integer-overflow at line 26
+- **CAUGHT**: bZx first flash-loan attack (2020, ~$350k) — flash-loan at line 25
+- **CAUGHT**: Harvest Finance (2020, $24M) — flash-loan at line 25
+- **CAUGHT**: Poly Network (2021, $611M returned) — access-control at line 23
+- **MISSED (intended)**: Beanstalk Farms (2022, $182M) — detector roadmap
+- **CAUGHT**: Nomad Bridge (2022, $190M) — unchecked-calls at line 29
+- **CAUGHT**: Wormhole Bridge (2022, $325M) — access-control at line 22
+- **CAUGHT**: Euler Finance (2023, $197M returned) — unchecked-calls at line 25
+
+**Intended misses.** The two `MISSED` entries deliberately preserve the real contract shape. Renaming `stalk.balanceOf(voter)` to `token.balanceOf(voter)` would flip Beanstalk to CAUGHT, and rewriting Parity v1's `fallback() { walletLib.delegatecall(msg.data); }` as a textbook `forward(address, bytes)` function would flip Parity v1 — both changes misrepresent the scanner rather than measure it. Each miss is annotated `INTENDED MISS:` in its `expected.json` with the exact detector gate that skips the real-world shape and the fix proposal tracked for a follow-up detector PR. See [`benchmarks/exploits/README.md`](benchmarks/exploits/README.md#intended-misses--detector-roadmap) for the roadmap.
+
+Reproduce:
+
+```bash
+make bench-exploits
+cat benchmarks/exploits/results/summary.md
+```
+
+All four artifacts (`summary.md`, `summary.json`, `misses.md`, `extras.md`) are byte-deterministic across runs — the corpus and ground truth are committed in full under `benchmarks/exploits/<YYYY-slug>/`, and the bench never fetches or compiles anything at runtime.
+
+---
+
+## Project mode
+
+`veil scan` reads one file at a time and is deliberately fast. It is also blind to
+everything declared elsewhere, which in Solidity is most of what decides whether
+code is safe. `onlyOwner` lives in an imported base contract; the interface behind
+`IVault(addr)` is in a third file.
+
+`veil analyze` resolves the whole tree first — imports (relative, remapped, and
+Foundry/Hardhat dependency layouts), contract declarations, C3 inheritance
+linearization — and then runs the same 13 detectors with those facts attached.
+
+```bash
+veil analyze ./contracts
+```
+
+```
+PROJECT   ./contracts
+
+  Files          217 analysed
+  Declarations   174 contracts, 48 interfaces, 25 libraries
+  Imports        409 resolved, 0 unresolved
+```
+
+### Why it changes the answer
+
+Per file, a modifier is a name. Access control has to be guessed from it, and the
+guess is wrong in both directions:
+
+| Modifier | Name-based guess | Veil in project mode | Used by |
+|---|---|---|---|
+| `onlyOwner { require(msg.sender == owner); }` | access control | access control | everyone |
+| `onlyOwner { _checkOwner(); }` | access control | access control | OpenZeppelin 5 |
+| `onlyRole { _checkRole(role); }` | access control | access control | OpenZeppelin `AccessControl` |
+| `auth { require(wards[msg.sender]); }` | **not** access control | access control | MakerDAO |
+| `requiresAuth { … }` | **not** access control | access control | Solmate |
+| `initializer { … }` | access control | **not** access control | every upgradeable proxy |
+| `whenNotPaused { require(!paused); }` | access control | **not** access control | OpenZeppelin `Pausable` |
+| `nonReentrant { … }` | access control | **not** access control | everywhere |
+
+The last three matter most. `initializer` prevents *re*-initialization; it does not
+restrict *who* calls the function. Treating it as access control hides the bug class
+that froze $150M in the Parity multisig.
+
+Modifiers rarely do the check inline, so resolution follows delegation up to three
+hops — enough for OpenZeppelin's `onlyRole`, where the caller read and the revert
+live in two different functions one hop apart.
+
+### Auditing the analysis
+
+Every verdict is inspectable. This is the command to run before trusting Veil on an
+unfamiliar codebase:
+
+```bash
+veil analyze ./contracts --explain-access-control
+```
+
+```
+ACCESS CONTROL RESOLUTION
+
+  gates on the caller (43)
+      13  onlyRole
+      10  onlyAuthorized
+      10  onlyGovernance
+       6  onlyOwner
+       2  onlyRoleOrOpenRole
+       2  restricted
+
+  does NOT gate on the caller (46)
+      17  initializer
+      13  onlyInitializing
+       5  nonReentrant
+       5  whenNotPaused
+       2  reinitializer
+       2  whenPaused
+       1  notDelegated
+       1  onlyProxy
+
+  could not resolve (0)
+```
+
+A modifier in the wrong column is visible in seconds. That is the point — the
+judgement stays cheap to check.
+
+### Comparing against per-file analysis
+
+```bash
+veil analyze ./contracts --compare
+```
+
+Runs both modes over the same files and reports what resolution changed:
+findings **suppressed** because a real guard became visible, and findings
+**revealed** because a guard turned out not to gate on the caller.
+
+### Measured
+
+Four production codebases at pinned revisions:
+
+| Protocol | Files | Imports | Unresolved | Wall time |
+|---|---:|---:|---:|---:|
+| OpenZeppelin v5.0.2 | 217 | 409 | **0** | 0.51 s |
+| Aave v3 v1.19.3 | 96 | 410 | **0** | 0.40 s |
+| Solmate | 20 | 87 | 1 | — |
+| MakerDAO dss | 16 | 49 | 22 | — |
+
+Across all four, every one of the 284 modifier classifications was checked by hand
+against the source. Zero misclassifications.
+
+Test and deployment-script files (`test/`, `script/`, `*.t.sol`, `*.s.sol`) are
+parsed so imports resolve, but excluded from reporting. A test contract is
+*supposed* to have unguarded functions that move funds; reporting on them buried
+everything real. Excluding them removed **93%** of findings on MakerDAO dss and
+**92%** on Solmate.
+
+> **Honest limits.** On these four protocols, cross-file resolution suppressed 0
+> findings and revealed 2, both in `mocks/` directories. The capability is correct
+> and covered by tests; its impact on these particular codebases was small. Project
+> mode's measured wins today are resolution coverage, the noise reduction from test
+> exclusion, and the `initializer` class.
 
 ---
 
@@ -83,38 +254,6 @@ The `make bench-precision` recipe auto-fetches the corpus on first run (shallow 
 
 ---
 
-## Historical exploits
-
-Veil flags the root-cause vulnerability in **12 of 14 reconstructed historical hacks** totalling **$1.63B of $1.84B** in losses (**88.5% coverage**). Each incident is a faithful minimum reconstruction from the verified on-chain source at the exploit block — not an SWC-style synthetic snippet — with ground truth pinned per-line in `expected.json` and a line-tolerance of ±2. Full headline in [`benchmarks/exploits/results/summary.md`](benchmarks/exploits/results/summary.md).
-
-- **CAUGHT**: The DAO (2016, $60M) — reentrancy at line 24
-- **CAUGHT**: King of the Ether Throne (2016, ~98 ETH silently dropped) — unchecked-calls at line 28
-- **CAUGHT**: GovernMental Ponzi (2016, ~1,100 ETH stuck) — timestamp-dependence at line 26
-- **MISSED (intended)**: Parity Multisig v1 (2017, $30M / 150k ETH) — detector roadmap
-- **CAUGHT**: Parity Multisig v2 (2017, $150M / 513k ETH frozen) — access-control at line 21
-- **CAUGHT**: SmartBillions Lottery (2017, ~$120k / 400 ETH) — unsafe-random at line 27
-- **CAUGHT**: BEC Token batchOverflow (2018, ~$70M paper) — integer-overflow at line 26
-- **CAUGHT**: bZx first flash-loan attack (2020, ~$350k) — flash-loan at line 25
-- **CAUGHT**: Harvest Finance (2020, $24M) — flash-loan at line 25
-- **CAUGHT**: Poly Network (2021, $611M returned) — access-control at line 23
-- **MISSED (intended)**: Beanstalk Farms (2022, $182M) — detector roadmap
-- **CAUGHT**: Nomad Bridge (2022, $190M) — unchecked-calls at line 29
-- **CAUGHT**: Wormhole Bridge (2022, $325M) — access-control at line 22
-- **CAUGHT**: Euler Finance (2023, $197M returned) — unchecked-calls at line 25
-
-**Intended misses.** The two `MISSED` entries deliberately preserve the real contract shape. Renaming `stalk.balanceOf(voter)` to `token.balanceOf(voter)` would flip Beanstalk to CAUGHT, and rewriting Parity v1's `fallback() { walletLib.delegatecall(msg.data); }` as a textbook `forward(address, bytes)` function would flip Parity v1 — both changes misrepresent the scanner rather than measure it. Each miss is annotated `INTENDED MISS:` in its `expected.json` with the exact detector gate that skips the real-world shape and the fix proposal tracked for a follow-up detector PR. See [`benchmarks/exploits/README.md`](benchmarks/exploits/README.md#intended-misses--detector-roadmap) for the roadmap.
-
-Reproduce:
-
-```bash
-make bench-exploits
-cat benchmarks/exploits/results/summary.md
-```
-
-All four artifacts (`summary.md`, `summary.json`, `misses.md`, `extras.md`) are byte-deterministic across runs — the corpus and ground truth are committed in full under `benchmarks/exploits/<YYYY-slug>/`, and the bench never fetches or compiles anything at runtime.
-
----
-
 ## Installation
 
 ### Download a prebuilt binary (recommended)
@@ -131,13 +270,13 @@ curl -sSL https://github.com/saintparish4/veil/releases/latest/download/veil-x86
 
 ```bash
 # From the git repository (no crates.io publish required)
-cargo install --git https://github.com/saintparish4/veil veil
+cargo install --git https://github.com/saintparish4/veil veil-cli
 ```
 
 Once Veil is published to crates.io you can also use [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) to fetch the prebuilt binary directly:
 
 ```bash
-cargo binstall veil
+cargo binstall veil-cli
 ```
 
 ### Build from source
@@ -153,7 +292,7 @@ cargo build --release   # binary at target/release/veil
 ### Run without installing
 
 ```bash
-cargo run -p veil -- scan <path>
+cargo run -p veil-cli -- scan <path>
 ```
 
 ---
@@ -164,8 +303,17 @@ cargo run -p veil -- scan <path>
 # Scan a single file
 veil scan MyContract.sol
 
-# Scan an entire project
+# Scan an entire project, one file at a time
 veil scan contracts/ --recursive
+
+# Analyse a whole project: resolve imports and inheritance first
+veil analyze contracts/
+
+# Show what cross-file resolution changed versus per-file analysis
+veil analyze contracts/ --compare
+
+# Audit every modifier verdict before trusting the results
+veil analyze contracts/ --explain-access-control
 
 # Output JSON for pipeline consumption
 veil scan contracts/ --recursive --format json > findings.json
@@ -203,6 +351,27 @@ Scan a `.sol` file or directory.
 | `--org-name <NAME>` | Organization name for report header |
 | `--no-rules` | Skip applying TOML rules from `.veil/rules/` |
 | `-v, --verbose` | Enable debug logging to stderr |
+
+### `veil analyze <dir>`
+
+Resolve a project, then run every detector with cross-file facts attached. Takes a
+directory — a Foundry tree, a Hardhat tree, or plain Solidity. Use `veil scan` for a
+single file.
+
+| Flag | Description |
+|------|-------------|
+| `<dir>` | Project directory to analyse |
+| `-f, --format <FORMAT>` | Output format: `terminal` (default), `json`, `sarif` |
+| `--compare` | Also run per-file mode and report which findings resolution changed |
+| `--explain-access-control` | List every modifier and whether it gates on the caller |
+| `--show-diagnostics` | List every unresolved import and base contract |
+| `--include-tests` | Report findings in test and script files (excluded by default) |
+| `--baseline <FILE>` | Suppress findings present in a JSON baseline file |
+| `--no-rules` | Skip applying TOML rules from `.veil/rules/` |
+| `-v, --verbose` | Enable debug logging to stderr |
+
+Exit codes match `veil scan`. Resolution diagnostics go to stderr, so piping JSON or
+SARIF to a file stays clean.
 
 ### `veil evm <bytecode>`
 
@@ -478,17 +647,27 @@ Detectors receive the same read-only `AnalysisContext` as the built-in detectors
 
 ## Architecture
 
-Veil is a Cargo workspace of four crates:
+Veil is a Cargo workspace of six crates, layered so that a lower layer never learns
+about a higher one. Cargo enforces the direction; module boundaries inside a single
+crate would not.
+
+```
+core          ← depends on nothing else in the workspace
+veil-evm      ← core            (shared Finding/Severity types)
+veil-project  ← core
+veil-plugin   ← core            (re-export only)
+veil-cli      ← everything
+```
 
 ```
 veil/
-├── Cargo.toml               # Workspace: core, veil-evm, veil-plugin, xtask
-├── core/                    # The `veil` library + CLI binary
+├── Cargo.toml               # Workspace: core, veil-project, veil-evm, veil-cli, veil-plugin, xtask
+├── core/                    # The `veil` library — parse, analyse, report
 │   └── src/
-│       ├── main.rs              # CLI (clap): scan / evm / diff subcommands
 │       ├── lib.rs               # Public API surface
 │       ├── scan.rs              # Orchestration: parse → analyze → suppress → report
 │       ├── detector_trait.rs    # Detector trait, AnalysisContext, DetectorRegistry
+│       ├── project_facts.rs     # ProjectFacts trait — the seam to cross-file analysis
 │       ├── ast_utils.rs         # Tree-sitter node helpers
 │       ├── cfg.rs               # Control flow graph builder
 │       ├── taint.rs             # Taint propagation over CFG
@@ -503,13 +682,29 @@ veil/
 │       ├── output.rs            # Terminal, JSON, SARIF formatters
 │       ├── report.rs            # HTML/PDF report generation
 │       └── detectors/           # 13 source-level detectors + build_registry
-│           ├── mod.rs
-│           ├── reentrancy.rs
-│           └── … (12 more)
+├── veil-project/            # Multi-file resolution
+│   └── src/
+│       ├── resolve.rs           # Import resolution, remappings, parsed-tree arena
+│       ├── contracts.rs         # Contract graph, C3 linearization, modifier bodies
+│       └── facts.rs             # impl ProjectFacts — answers core's questions
 ├── veil-evm/                # EVM bytecode frontend: disasm, EVM CFG, source maps
+├── veil-cli/                # The `veil` binary: scan / analyze / evm / diff
 ├── veil-plugin/             # Public API for authoring custom detectors
 └── xtask/                   # Benchmark / repo automation runner
 ```
+
+**Why the CLI is its own crate.** `veil-project` depends on `veil`, so a binary
+living inside `veil` could never reach project resolution — Cargo rejects the cycle.
+`veil-cli` is the one layer permitted to depend on everything.
+
+**How cross-file facts reach a detector.** `core` declares the `ProjectFacts` trait;
+`veil-project` implements it. Detectors read it through
+`AnalysisContext.project: Option<&dyn ProjectFacts>`. Two properties carry the
+design: `None` is the default, so `veil scan` behaves exactly as it always has and
+pays nothing; and `None` is also a valid *answer*, so when a modifier resolves to a
+file outside the project the detector falls back rather than assuming no guard
+exists. Treating "could not resolve" as "unprotected" would manufacture false
+positives on every project with vendored dependencies.
 
 Each detector is a zero-sized struct implementing the `Detector` trait. Detectors receive a read-only `AnalysisContext` containing the parsed tree-sitter AST, raw source, pre-computed function nodes, and a lazy CFG cache. They append `Finding` values without side effects.
 
@@ -524,6 +719,9 @@ See [`core/src/detectors/README.md`](core/src/detectors/README.md) for the full 
 ```bash
 cargo test
 ```
+
+283 tests across the workspace: unit tests inline, integration tests in
+`veil-project/tests/` against real temp-directory projects on disk.
 
 ### Run a scan against test fixtures
 
