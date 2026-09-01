@@ -267,7 +267,28 @@ fn run_evm_command(
     std::process::exit(if evm_findings.is_empty() { 0 } else { 2 });
 }
 
+/// Restore the default disposition for SIGPIPE.
+///
+/// Rust ignores SIGPIPE at startup, so writing to a closed pipe comes back as an
+/// error that `println!` turns into a panic. That means `veil analyze big/ | head`
+/// prints a Rust panic and a backtrace instead of exiting quietly the way every
+/// other unix tool does. Restoring the default handler makes the process die on
+/// the signal, which is what a shell pipeline expects.
+#[cfg(unix)]
+fn restore_default_sigpipe() {
+    // SAFETY: installing SIG_DFL is async-signal-safe, and this runs before any
+    // thread is spawned.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+
+#[cfg(not(unix))]
+fn restore_default_sigpipe() {}
+
 fn main() {
+    restore_default_sigpipe();
+
     let cli = Cli::parse();
     init_tracing(cli.verbose);
 

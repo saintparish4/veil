@@ -44,6 +44,8 @@ sha2 = "0.11.0"
 colored = "3.1.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rayon = "1.10.0"
+# Only used to restore default SIGPIPE handling in the CLI.
+libc = "0.2"
 
 # Dev deps shared across members.
 insta = { version = "1", features = ["json"] }

@@ -8,6 +8,13 @@
 
 Veil is a static analysis scanner for Solidity smart contracts that solves the false-positive problem plaguing traditional security tools. Most scanners flag legitimate DeFi patterns — user withdrawals, staking claims, reward distributions — as vulnerabilities, burying real issues under noise. Veil understands modern smart contract architecture and delivers precise, actionable findings.
 
+<p align="center">
+  <img src="docs/demo.gif" alt="veil analyze resolving OpenZeppelin v5.0.2 and classifying every access-control modifier" width="900">
+</p>
+
+<sub>Recorded against a real OpenZeppelin v5.0.2 checkout. Reproduce with
+<a href="docs/record-demo.sh"><code>./docs/record-demo.sh &lt;checkout&gt;</code></a>.</sub>
+
 ### At a glance
 
 - Flags the root-cause vulnerability in **12 of 14 reconstructed historical hacks** — **$1.63B of $1.84B** in losses — each rebuilt from the verified on-chain source at the exploit block, with per-line ground truth. [See the breakdown ↓](#historical-exploits)
@@ -169,7 +176,9 @@ ACCESS CONTROL RESOLUTION
 ```
 
 A modifier in the wrong column is visible in seconds. That is the point — the
-judgement stays cheap to check.
+judgement stays cheap to check. This is the command in the
+[recording at the top of this README](#veil), and it is how I caught my own
+analysis misclassifying `onlyRole` before it shipped.
 
 ### Comparing against per-file analysis
 
