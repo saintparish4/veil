@@ -16,6 +16,7 @@ pub mod diff;
 pub mod helpers;
 pub mod interprocedural;
 pub mod output;
+pub mod project_facts;
 pub mod report;
 pub mod rule_engine;
 pub mod scan;
@@ -30,6 +31,7 @@ pub mod types;
 pub use detector_trait::{AnalysisContext, Detector, DetectorRegistry};
 pub use helpers::*;
 pub use output::{format_json, format_sarif};
+pub use project_facts::{ModifierFacts, ProjectFacts};
 pub use report::{HtmlReport, PdfReport, ReportConfig, ReportError, ReportGenerator};
 pub use scan::{calculate_statistics, scan_directory_with, scan_file_with};
 pub use suppression::{

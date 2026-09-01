@@ -13,6 +13,7 @@ use crate::ast_utils::find_nodes_of_kind;
 use crate::cfg::ControlFlowGraph;
 use crate::defi_patterns::{classify_contract_role, ContractRole};
 use crate::interprocedural::{build_summaries, FunctionSummary};
+use crate::project_facts::ProjectFacts;
 use crate::storage_model::{build_storage_model, StorageModel};
 use crate::types::{Confidence, Finding, Severity};
 use std::cell::RefCell;
@@ -44,6 +45,9 @@ pub struct AnalysisContext<'a> {
     /// Inter-procedural summaries for all functions in the file, built once in `::new`.
     /// Detectors can query `ctx.summaries.get("funcName")` to check transitive properties.
     pub summaries: HashMap<String, FunctionSummary>,
+    /// Cross-file facts, when the caller resolved a whole project. `None` for the
+    /// per-file fast path, and detectors must keep working in that case.
+    pub project: Option<&'a dyn ProjectFacts>,
     /// Lazy storage layout model. Call `ctx.storage_model()` to access; built on first call.
     storage_model: RefCell<Option<StorageModel>>,
     /// Lazy CFG cache keyed by function byte offset; only functions that request
@@ -68,6 +72,7 @@ impl<'a> AnalysisContext<'a> {
             functions,
             contract_role,
             summaries: HashMap::new(),
+            project: None,
             storage_model: RefCell::new(None),
             cfgs: RefCell::new(HashMap::new()),
         };
@@ -114,6 +119,13 @@ impl<'a> AnalysisContext<'a> {
     /// Attach a file path (used for file-scoped analyses and error messages).
     pub fn with_file_path(mut self, path: &'a str) -> Self {
         self.file_path = Some(path);
+        self
+    }
+
+    /// Attach resolved project facts so detectors can consult cross-file
+    /// information. Without this the context behaves exactly as it always has.
+    pub fn with_project(mut self, project: &'a dyn ProjectFacts) -> Self {
+        self.project = Some(project);
         self
     }
 }

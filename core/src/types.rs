@@ -51,7 +51,7 @@ impl Confidence {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Visibility {
     Public,
     External,

@@ -1,0 +1,22 @@
+[package]
+name = "veil-project"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Veil — multi-file Solidity project resolution: imports, inheritance, contract graph."
+
+[lib]
+name = "veil_project"
+path = "src/lib.rs"
+
+[dependencies]
+veil = { path = "../core", default-features = false }
+tree-sitter = { workspace = true }
+tree-sitter-solidity = { workspace = true }
+walkdir = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

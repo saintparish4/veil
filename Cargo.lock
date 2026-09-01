@@ -1133,6 +1133,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "veil-project"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
+ "tracing",
+ "tree-sitter",
+ "tree-sitter-solidity",
+ "veil",
+ "walkdir",
+]
+
+[[package]]
 name = "version_check"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -9,8 +9,8 @@
 //! Falls back to AST-based sensitive-operation and parameter checks when cfg_for returns None.
 
 use crate::ast_utils::{
-    find_nodes_of_kind, func_body, function_name, function_visibility, get_call_target,
-    has_access_control, node_text, CallTarget,
+    enclosing_contract_name, find_nodes_of_kind, func_body, function_name, function_visibility,
+    get_call_target, has_access_control_modifier, has_require_sender_check, node_text, CallTarget,
 };
 use crate::detector_trait::{AnalysisContext, Detector};
 use crate::helpers::should_skip_access_control_warning;
@@ -23,6 +23,37 @@ pub struct AccessControlDetector;
 // ---------------------------------------------------------------------------
 // Local AST helpers
 // ---------------------------------------------------------------------------
+
+/// Is this function access controlled?
+///
+/// Without project facts this is the historical behaviour: an inline
+/// `require(msg.sender == …)`, or a modifier whose *name* looks like a guard.
+/// The name check is wrong in both directions — `auth` and `requiresAuth` are
+/// real access control it rejects, and `onlyAfter`/`whenNotPaused` are time and
+/// pause guards it accepts — but per file there is nothing better available,
+/// because the modifier is almost always declared in an imported base.
+///
+/// With project facts resolved, I read the modifier body instead of its name and
+/// use that verdict. `None` from the project means a modifier came from a file
+/// outside the tree, so I fall back rather than assume it is absent.
+///
+/// The inline check runs first either way: project facts speak only about
+/// modifiers, so a function guarded by a bare `require` must not depend on them.
+fn is_access_controlled(ctx: &AnalysisContext<'_>, func: &Node) -> bool {
+    if has_require_sender_check(func, ctx.source) {
+        return true;
+    }
+    if let (Some(project), Some(contract), Some(name)) = (
+        ctx.project,
+        enclosing_contract_name(func, ctx.source),
+        function_name(func, ctx.source),
+    ) {
+        if let Some(verdict) = project.is_access_controlled(contract, name) {
+            return verdict;
+        }
+    }
+    has_access_control_modifier(func, ctx.source)
+}
 
 /// Return `true` if `name` is a known sensitive admin/protocol call target.
 ///
@@ -214,9 +245,9 @@ impl Detector for AccessControlDetector {
 
             // --- Check 1: Sensitive operation without access control ---
             //
-            // Modifier-based guards (onlyOwner, etc.) are not inlined into the CFG, so we
-            // check has_access_control first and skip both CFG and AST paths when a guard exists.
-            let has_ac = has_access_control(func, ctx.source);
+            // Modifier-based guards (onlyOwner, etc.) are not inlined into the CFG, so I
+            // settle access control first and skip both CFG and AST paths when a guard exists.
+            let has_ac = is_access_controlled(ctx, func);
 
             let used_cfg_for_check1 = if !has_ac {
                 if let Some(cfg_ref) = ctx.cfg_for(func) {
@@ -289,8 +320,7 @@ impl Detector for AccessControlDetector {
                 }
 
                 // Uses AST parameter inspection instead of `func_text.contains("address to")`.
-                if has_address_recipient_param(func, ctx.source)
-                    && !has_access_control(func, ctx.source)
+                if has_address_recipient_param(func, ctx.source) && !is_access_controlled(ctx, func)
                 {
                     findings.push(Finding::from_detector(
                         self,

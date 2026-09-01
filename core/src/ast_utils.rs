@@ -94,6 +94,49 @@ pub fn function_name<'a>(func_node: &Node, source: &'a str) -> Option<&'a str> {
     None
 }
 
+/// Names of the node kinds that declare a contract-like scope.
+///
+/// The grammar splits these into three kinds, and anything walking declarations
+/// has to handle all three or it silently skips libraries and interfaces.
+pub const CONTRACT_KINDS: [&str; 3] = [
+    "contract_declaration",
+    "interface_declaration",
+    "library_declaration",
+];
+
+/// Extract the declared name from a contract, interface, or library node.
+pub fn contract_name<'a>(node: &Node, source: &'a str) -> Option<&'a str> {
+    if !CONTRACT_KINDS.contains(&node.kind()) {
+        return None;
+    }
+    if let Some(name_node) = node.child_by_field_name("name") {
+        return Some(node_text(&name_node, source));
+    }
+    // Fall back to the first identifier: the grammar puts the name there, ahead of
+    // any `inheritance_specifier` children.
+    for i in 0..child_count(node) {
+        if let Some(child) = node.child(i) {
+            if child.kind() == "identifier" {
+                return Some(node_text(&child, source));
+            }
+        }
+    }
+    None
+}
+
+/// Walk up from any node to the name of the contract, interface, or library that
+/// encloses it. Returns `None` for file-level declarations such as free functions.
+pub fn enclosing_contract_name<'a>(node: &Node, source: &'a str) -> Option<&'a str> {
+    let mut current = node.parent();
+    while let Some(n) = current {
+        if CONTRACT_KINDS.contains(&n.kind()) {
+            return contract_name(&n, source);
+        }
+        current = n.parent();
+    }
+    None
+}
+
 /// Read the `visibility` keyword from a `function_definition` node.
 pub fn function_visibility(func_node: &Node, source: &str) -> Visibility {
     if func_node.kind() != "function_definition" {
