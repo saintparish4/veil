@@ -60,9 +60,15 @@ sleep 8.0
 
 clear
 sleep 0.4
-say "# 'initializer' prevents RE-initialization. It does not restrict WHO calls"
-say "# the function. That is the bug class that froze \$150M in the Parity multisig."
-say ""
-say "# A name-based check calls it access control and stays silent."
+say "# 'initializer' prevents RE-initialization. It does not restrict WHO calls the"
+say "# function — the bug class that froze \$150M in the Parity multisig."
 printf '\n'
-sleep 5.0
+sleep 0.5
+
+run "veil analyze $PROJECT --compare | head -10"
+sleep 6.5
+
+say ""
+say "# Per-file analysis reports that function as protected. It is not."
+printf '\n'
+sleep 4.0
